@@ -1,0 +1,28 @@
+{
+  "__comments": {
+    "source_path": "Path to the source SQLite database. Supports ~ expansion. Default: /storage/emulated/0/Download/health/Gadgetbridge.db",
+    "upload_url": "HTTPS endpoint for snapshot upload. Must start with https://. Default: https://oh-my-frontweb.duckdns.org/health/api/v1/upload",
+    "state_path": "Path to the state file recording last push outcome. Supports ~ expansion. Default: ~/.local/state/health-bridge/push-state.json",
+    "poll_interval_seconds": "Seconds between polls in watch mode. Must be positive. Default: 900",
+    "stability_delay_seconds": "Seconds between two stat checks to confirm the source file is not being written. Must be positive. Default: 5",
+    "request_timeout_seconds": "HTTP request timeout in seconds. Must be positive. Default: 120",
+    "max_retries": "Maximum retry attempts for transient failures (5xx, 429, timeout). 0 means one attempt with no retry. Default: 5",
+    "max_uncompressed_bytes": "Maximum source file size in bytes. Files exceeding this are rejected before upload. Default: 104857600 (100 MB)",
+    "chunk_size": "Chunk size in bytes for file reading, SHA-256 computation, gzip streaming, and HTTP body streaming. Default: 1048576 (1 MB)",
+    "max_response_bytes": "Maximum response body size accepted from the server in bytes. Default: 1048576 (1 MB)",
+    "token_env": "Name of the environment variable holding the upload token. Default: HEALTH_UPLOAD_TOKEN",
+    "token_file": "Optional path to a file containing the token. Supports ~ expansion. Lower priority than the environment variable. Set to null to disable. Default: null"
+  },
+  "source_path": "/storage/emulated/0/Download/health/Gadgetbridge.db",
+  "upload_url": "https://oh-my-frontweb.duckdns.org/health/api/v1/upload",
+  "state_path": "~/.local/state/health-bridge/push-state.json",
+  "poll_interval_seconds": 900,
+  "stability_delay_seconds": 5,
+  "request_timeout_seconds": 120,
+  "max_retries": 5,
+  "max_uncompressed_bytes": 104857600,
+  "chunk_size": 1048576,
+  "max_response_bytes": 1048576,
+  "token_env": "HEALTH_UPLOAD_TOKEN",
+  "token_file": null
+}
