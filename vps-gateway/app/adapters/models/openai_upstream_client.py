@@ -60,7 +60,12 @@ class OpenAIUpstreamClient(ModelClient):
             else self._default_max_tokens
         )
 
-        url = f"{self._base_url}/v1/chat/completions"
+        # base_url 可能已包含 /v1 或不包含，统一处理
+        base = self._base_url.rstrip("/")
+        if base.endswith("/v1"):
+            url = f"{base}/chat/completions"
+        else:
+            url = f"{base}/v1/chat/completions"
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
         self._logger.info("upstream_request_started",

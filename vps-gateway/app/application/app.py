@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -16,6 +17,7 @@ from app.adapters.models.openai_upstream_client import OpenAIUpstreamClient
 from app.adapters.outbox.sqlite_outbox_store import SQLiteOutboxStore
 from app.adapters.http.chat_controller import create_chat_router
 from app.adapters.http.outbox_controller import create_outbox_router
+from app.adapters.scheduler.local_scheduler import LocalScheduler
 from app.application.turn_runner import TurnRunner
 from app.domain.models.context_builder import ContextBuilder
 from app.infrastructure.logging import get_logger
@@ -27,25 +29,25 @@ def create_app(config: Config) -> FastAPI:
     数据输入: Config (从环境变量加载)
     数据输出: FastAPI 实例 (已注册所有路由)
     指令:
-      1. 创建 SampleReader (FileSampleRepository)
-      2. 创建 ModelClient (OpenAIUpstreamClient)
-      3. 创建 OutboxStore (SQLiteOutboxStore)
-      4. 创建 ContextBuilder
-      5. 创建 TurnRunner (注入以上依赖)
-      6. 注册 Chat Controller 路由
-      7. 注册 Outbox Controller 路由
+      1. 校验配置
+      2. 创建 SampleReader (FileSampleRepository)
+      3. 创建 ModelClient (OpenAIUpstreamClient)
+      4. 创建 OutboxStore (SQLiteOutboxStore)
+      5. 创建 ContextBuilder
+      6. 创建 TurnRunner (注入以上依赖)
+      7. 创建 LocalScheduler (注入 TurnRunner)
+      8. 注册 Chat Controller 路由
+      9. 注册 Outbox Controller 路由
+     10. 注册 lifespan: 启动/关闭 Scheduler
     """
     logger = get_logger("app_factory")
 
+    # 0. 配置校验
+    config.validate()
+
     # 1. 适配器
     sample_reader = FileSampleRepository(config.sample_directory)
-    model_client = OpenAIUpstreamClient(
-        base_url=config.upstream_base_url,
-        api_key=config.upstream_api_key,
-        model=config.upstream_model,
-        timeout_seconds=config.upstream_timeout_seconds,
-        token_limit_field=config.upstream_token_limit_field,
-    )
+    model_client = OpenAIUpstreamClient(config=config)
     outbox_store = SQLiteOutboxStore(config.outbox_database_path)
 
     # 2. 领域服务
@@ -59,14 +61,32 @@ def create_app(config: Config) -> FastAPI:
         outbox_store=outbox_store,
     )
 
-    # 4. HTTP 路由
-    app = FastAPI(title="VPS Gateway")
+    # 4. 调度器
+    scheduler = LocalScheduler(
+        turn_runner=turn_runner,
+        interval_minutes=config.active_turn_interval_minutes,
+        instruction=config.active_turn_instruction,
+        enabled=config.active_turn_enabled,
+    )
+
+    # 5. HTTP 路由
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # startup: scheduler 已在构造时启动
+        logger.info("app_started", extra={
+            "host": config.gateway_host,
+            "port": config.gateway_port,
+            "active_turn_enabled": config.active_turn_enabled,
+        })
+        yield
+        # shutdown: 优雅停止 scheduler
+        scheduler.shutdown()
+        logger.info("app_stopped")
+
+    app = FastAPI(title="VPS Gateway", lifespan=lifespan)
     app.include_router(create_chat_router(turn_runner, config.gateway_api_key))
     app.include_router(create_outbox_router(outbox_store, config.gateway_api_key))
-
-    logger.info("app_created", extra={
-        "host": config.gateway_host,
-        "port": config.gateway_port,
-    })
+    app.state.scheduler = scheduler
+    app.state.config = config
 
     return app

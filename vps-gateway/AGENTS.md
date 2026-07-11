@@ -9,7 +9,7 @@
 - Python 3.12+
 - uv (包管理 + 虚拟环境)
 - pytest (测试)
-- 标准库 http.server / http.client (首版不引入 Web 框架，保持最小依赖)
+- 标准库 + FastAPI + uvicorn + httpx (HTTP 服务与上游调用)
 - SQLite3 (标准库，Outbox 存储)
 
 ## 目录结构
@@ -51,7 +51,9 @@ vps-gateway/
 - HTTP 边界：`app/adapters/http/chat_controller.py` / `outbox_controller.py`
 - Outbox 存储：`app/adapters/outbox/sqlite_outbox_store.py` — `SQLiteOutboxStore`
 - 应用工厂：`app/application/app.py` — `create_app(config)`
-- 实现计划：`docs/plans/M1~M4`
+- 启动入口：`app/main.py` — 加载 .env → Config → create_app → uvicorn
+- 调度器：`app/adapters/scheduler/local_scheduler.py` — `LocalScheduler`
+- 实现计划：`docs/plans/M1~M6`
 
 ## 实现进度
 
@@ -59,15 +61,17 @@ vps-gateway/
 - [x] M2: ContextBuilder + OpenAIUpstreamClient (98 tests)
 - [x] M3: POST /v1/chat/completions + TurnRunner (23 tests)
 - [x] M4: SQLiteOutboxStore + GET /v1/outbox (45 tests)
-- [ ] M5: LocalScheduler + 主动回合
-- [ ] M6: 部署 VPS
+- [x] M5: LocalScheduler + 主动回合调度 (15 tests)
+- [x] M6: 部署 + 真实 API 冒烟测试 (264 tests total)
 
-全量回归: 249 passed
+全量回归: 264 passed
+真实 API 冒烟测试: PASS (DeepSeek deepseek-v4-flash)
 
 ## 运行与预览
 
 - 不可预览（后端 API 服务，无前端页面）
-- 本地运行：`uv run python -m app` (M3 完成后)
+- 本地运行：`uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`
+- 或：`uv run python -m app.main`
 - 测试：`uv run pytest`
 - 配置：复制 `.env.example` 为 `.env`，填入上游模型配置
 
@@ -91,4 +95,8 @@ vps-gateway/
 - SQLite WAL 模式，重启后数据持久
 - Outbox limit 被 clamp 到 1..100
 - 空页时 next_cursor 等于传入的 after_cursor
-- 主动回合不立即重试，等待下一正常周期（M5 实现）
+- 主动回合不立即重试，等待下一正常周期
+- 上游 base_url 可能已包含 /v1，客户端自动处理避免重复拼接
+- Config.validate() 启动时 fail-fast: 检查 model/api_key/interval
+- LocalScheduler 使用 threading.Event 实现可中断睡眠
+- create_app 使用 FastAPI lifespan 管理 scheduler 生命周期

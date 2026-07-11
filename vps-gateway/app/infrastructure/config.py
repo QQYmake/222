@@ -109,3 +109,20 @@ class Config:
                 os.environ.get("DEFAULT_MAX_OUTPUT_TOKENS", "1200"), 1200
             ),
         )
+
+    def validate(self) -> None:
+        """启动时校验配置完整性。
+
+        指令:
+          1. UPSTREAM_MODEL 为空时拒绝启动
+          2. ACTIVE_TURN_ENABLED=true 时 INTERVAL >= 1
+          3. UPSTREAM_API_KEY 为空时拒绝启动
+        """
+        if not self.upstream_model:
+            raise ValueError("UPSTREAM_MODEL must not be empty")
+        if not self.upstream_api_key:
+            raise ValueError("UPSTREAM_API_KEY must not be empty")
+        if self.active_turn_enabled and self.active_turn_interval_minutes < 1:
+            raise ValueError(
+                "ACTIVE_TURN_INTERVAL_MINUTES must be >= 1 when active turn is enabled"
+            )
