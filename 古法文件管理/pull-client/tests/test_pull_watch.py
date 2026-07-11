@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from clients.health_bridge.pull_config import PullConfig
-from clients.health_bridge.pull_watch import watch_once
+from health_bridge.pull_config import PullConfig
+from health_bridge.pull_watch import watch_once
 
 
 def _make_config() -> PullConfig:

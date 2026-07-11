@@ -21,7 +21,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable, Iterator
 
-from clients.health_bridge.push_config import PushConfig
+from health_bridge.push_config import PushConfig
 
 # SQLite databases always start with these 16 bytes.
 _SQLITE_MAGIC = b"SQLite format 3\x00"

@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from clients.health_bridge.push_config import PushConfig
-from clients.health_bridge.push_snapshot import PreparedSnapshot
+from health_bridge.push_config import PushConfig
+from health_bridge.push_snapshot import PreparedSnapshot
 
 _BOUNDARY = "----healthbridgesnapshotboundary----"
 _USER_AGENT = "health-bridge/1.0"

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from clients.health_bridge.pull_config import PullConfig, load_pull_config
+from health_bridge.pull_config import PullConfig, load_pull_config
 
 
 class TestPullConfigDefaults:

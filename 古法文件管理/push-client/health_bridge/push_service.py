@@ -17,10 +17,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable
 
-from clients.health_bridge.push_config import PushConfig
-from clients.health_bridge.push_snapshot import PreparedSnapshot, prepare_snapshot
-from clients.health_bridge.push_state import PushState, load_state, save_state
-from clients.health_bridge.push_transport import (
+from health_bridge.push_config import PushConfig
+from health_bridge.push_snapshot import PreparedSnapshot, prepare_snapshot
+from health_bridge.push_state import PushState, load_state, save_state
+from health_bridge.push_transport import (
     PermanentUploadError,
     TransientUploadError,
     UploadResult,

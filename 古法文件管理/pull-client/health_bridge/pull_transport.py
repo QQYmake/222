@@ -11,7 +11,7 @@ import ssl
 import urllib.parse
 from typing import Any, Callable, Mapping
 
-from clients.health_bridge.pull_config import PullConfig
+from health_bridge.pull_config import PullConfig
 
 _USER_AGENT = "health-bridge-pull/1.0"
 _MAX_RESPONSE_BYTES = 1_048_576  # 1 MiB
