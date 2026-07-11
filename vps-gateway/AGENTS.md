@@ -45,16 +45,24 @@ vps-gateway/
 - Sample 读取：`app/adapters/samples/file_sample_repository.py` — `FileSampleRepository`
 - 领域端口：`app/domain/ports/sample_reader.py` — `SampleReader` 接口
 - 领域模型：`app/domain/models/sample.py` — `SampleEnvelope`, `validate_sample`, `SampleReadError`
-- 实现计划：`docs/plans/M1-sample-repository.md`
+- 上下文构造：`app/domain/models/context_builder.py` — `ContextBuilder`
+- 上游模型客户端：`app/adapters/models/openai_upstream_client.py` — `OpenAIUpstreamClient`
+- 回合编排：`app/application/turn_runner.py` — `TurnRunner`
+- HTTP 边界：`app/adapters/http/chat_controller.py` / `outbox_controller.py`
+- Outbox 存储：`app/adapters/outbox/sqlite_outbox_store.py` — `SQLiteOutboxStore`
+- 应用工厂：`app/application/app.py` — `create_app(config)`
+- 实现计划：`docs/plans/M1~M4`
 
 ## 实现进度
 
-- [x] M1: 四份 Sample + FileSampleRepository (83 tests passing)
-- [ ] M2: ContextBuilder + OpenAIUpstreamClient
-- [ ] M3: POST /v1/chat/completions
-- [ ] M4: SQLiteOutboxStore + GET /v1/outbox
+- [x] M1: 四份 Sample + FileSampleRepository (83 tests)
+- [x] M2: ContextBuilder + OpenAIUpstreamClient (98 tests)
+- [x] M3: POST /v1/chat/completions + TurnRunner (23 tests)
+- [x] M4: SQLiteOutboxStore + GET /v1/outbox (45 tests)
 - [ ] M5: LocalScheduler + 主动回合
 - [ ] M6: 部署 VPS
+
+全量回归: 249 passed
 
 ## 运行与预览
 
@@ -78,5 +86,9 @@ vps-gateway/
 - identity Sample 缺失/无效时拒绝请求，不得降级
 - 三类可选 Sample 缺失/损坏时降级为空值，记录 `optional_sample_degraded` 警告
 - 降级 Envelope 使用 version=0, source=fallback_empty
-- 同一 trigger_id 在 Outbox 中至多一条消息（M4 实现）
+- 同一 trigger_id 在 Outbox 中至多一条消息（幂等: ON CONFLICT DO NOTHING + SELECT）
+- 主动回合 <NO_MESSAGE> 不写 Outbox
+- SQLite WAL 模式，重启后数据持久
+- Outbox limit 被 clamp 到 1..100
+- 空页时 next_cursor 等于传入的 after_cursor
 - 主动回合不立即重试，等待下一正常周期（M5 实现）
