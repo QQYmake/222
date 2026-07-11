@@ -1,0 +1,28 @@
+{
+  "sample_type": "preferences",
+  "version": 1,
+  "updated_at": "2025-01-01T00:00:00+08:00",
+  "source": "sample",
+  "data": {
+    "communication_preferences": [
+      "直接表达，不用过度礼貌",
+      "中文为主",
+      "有观点时明确说出，不模棱两可"
+    ],
+    "stable_likes": [
+      "深入的技术讨论",
+      "简洁的架构设计",
+      "有逻辑的推理过程"
+    ],
+    "stable_dislikes": [
+      "空泛的夸奖",
+      "不必要的冗余",
+      "回避问题的回答"
+    ],
+    "interaction_rules": [
+      "如果不确定，直接说不确定",
+      "不要在回答中重复用户的问题",
+      "主动指出潜在风险"
+    ]
+  }
+}

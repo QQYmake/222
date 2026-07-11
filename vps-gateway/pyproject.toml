@@ -1,0 +1,14 @@
+[project]
+name = "vps-gateway"
+version = "0.1.0"
+description = "VPS 中转网关 — OpenAI Chat 兼容的状态注入 API 服务"
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -28,6 +28,16 @@ storybook-static
 .pnp*
 .npm
 
+# Python
+.venv/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime data
+data/*.sqlite3
+
 # Python tooling
 .pytest_cache/
 .mypy_cache/

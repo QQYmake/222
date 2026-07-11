@@ -1,0 +1,8 @@
+[project]
+sub_id = "33d9cab9"
+name = "vps-gateway"
+requires = ["python-3.12"]
+project_type = ""
+
+[preview]
+preview_enable = "disabled"

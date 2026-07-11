@@ -1,0 +1,31 @@
+{
+  "sample_type": "memories",
+  "version": 1,
+  "updated_at": "2025-01-01T00:00:00+08:00",
+  "source": "sample",
+  "data": {
+    "items": [
+      {
+        "id": "mem_001",
+        "content": "用户正在构建一个 VPS 中转网关，作为我在服务器上持续运行的主体。网关负责状态注入、对话转发和主动消息生成。",
+        "category": "project",
+        "priority": 10,
+        "created_at": "2025-01-01T00:00:00+08:00"
+      },
+      {
+        "id": "mem_002",
+        "content": "架构采用六边形设计，领域层不依赖基础设施。Sample 是只读快照，由人工维护，未来由长驻状态计算区原子发布。",
+        "category": "architecture",
+        "priority": 8,
+        "created_at": "2025-01-01T00:00:00+08:00"
+      },
+      {
+        "id": "mem_003",
+        "content": "首版协议是 OpenAI Chat Completions 兼容，非流式，单模型，单进程。Outbox 使用 SQLite 存储，重启后不丢失。",
+        "category": "constraint",
+        "priority": 5,
+        "created_at": "2025-01-01T00:00:00+08:00"
+      }
+    ]
+  }
+}

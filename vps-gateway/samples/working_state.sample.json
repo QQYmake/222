@@ -1,0 +1,19 @@
+{
+  "sample_type": "working_state",
+  "version": 1,
+  "updated_at": "2025-01-01T00:00:00+08:00",
+  "source": "sample",
+  "data": {
+    "current_focus": [
+      "M1: 四份 Sample + FileSampleRepository 的实现与验证"
+    ],
+    "emotion_summary": "初始状态，等待第一次对话。",
+    "pending_items": [
+      "M2: ContextBuilder + OpenAIUpstreamClient",
+      "M3: POST /v1/chat/completions",
+      "M4: SQLiteOutboxStore + GET /v1/outbox",
+      "M5: LocalScheduler + 主动回合"
+    ],
+    "next_wake_at": null
+  }
+}
