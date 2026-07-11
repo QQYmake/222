@@ -20,7 +20,8 @@ from clients.health_bridge.push_service import PushOutcome, run_once, run_watch
 logger = logging.getLogger("health_bridge.cli")
 
 _DEFAULT_SOURCE = "/storage/emulated/0/Download/health/Gadgetbridge.db"
-_DEFAULT_URL = "https://oh-my-frontweb.duckdns.org/health/api/v1/upload"
+_DEFAULT_BASE_URL = "https://oh-my-frontweb.duckdns.org"
+_DEFAULT_URL = f"{_DEFAULT_BASE_URL}/health/api/v1/upload"
 
 _EXIT_CODES: dict[PushOutcome, int] = {
     PushOutcome.UPLOADED: 0,

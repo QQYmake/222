@@ -34,6 +34,7 @@ def _make_config(**overrides) -> PushConfig:
         max_response_bytes=1_048_576,
         token_env="HEALTH_UPLOAD_TOKEN",
         token_file=None,
+        upload_base_url="https://oh-my-frontweb.duckdns.org",
         upload_token="test-token",
     )
     defaults.update(overrides)

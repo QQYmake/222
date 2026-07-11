@@ -9,6 +9,39 @@
 - 对由你的健康追踪应用生成的 SQLite 数据库文件拥有读取权限（默认路径：Android 上的 Gadgetbridge 导出文件）
 - 由服务器运营方签发的上传令牌
 
+## 服务器地址配置
+
+推送客户端默认将数据上传到 `https://oh-my-frontweb.duckdns.org/health/api/v1/upload`。你可以通过以下方式更改目标服务器：
+
+### 环境变量（推荐）
+
+设置 `HEALTH_UPLOAD_BASE_URL` 环境变量即可覆盖目标域名，上传路径 `/health/api/v1/upload` 会自动拼接：
+
+```sh
+export HEALTH_UPLOAD_BASE_URL='https://your-server.example.com'
+```
+
+### 配置文件
+
+在 JSON 配置文件中设置 `upload_base_url` 字段：
+
+```json
+{
+  "upload_base_url": "https://your-server.example.com"
+}
+```
+
+### 优先级
+
+从高到低：
+
+1. 配置文件中显式设置 `upload_url`（完整 URL，完全覆盖）
+2. `HEALTH_UPLOAD_BASE_URL` 环境变量
+3. 配置文件中的 `upload_base_url` 字段
+4. 内置默认值 `https://oh-my-frontweb.duckdns.org`
+
+如果使用了 `upload_base_url` 或环境变量，最终上传 URL 为 `<base_url>/health/api/v1/upload`。base URL 末尾的斜杠会自动去除。
+
 ---
 
 ## Termux 配置（Android）

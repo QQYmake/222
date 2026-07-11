@@ -1,7 +1,8 @@
 {
   "__comments": {
     "source_path": "Path to the source SQLite database. Supports ~ expansion. Default: /storage/emulated/0/Download/health/Gadgetbridge.db",
-    "upload_url": "HTTPS endpoint for snapshot upload. Must start with https://. Default: https://oh-my-frontweb.duckdns.org/health/api/v1/upload",
+    "upload_base_url": "Base URL of the health-bridge server. The upload endpoint is constructed as <upload_base_url>/health/api/v1/upload. Default: https://oh-my-frontweb.duckdns.org. Can also be set via the HEALTH_UPLOAD_BASE_URL environment variable (takes precedence over this field).",
+    "upload_url": "Optional full override for the upload endpoint. If set, takes precedence over upload_base_url and the environment variable. Must start with https://. Set to null or omit to use upload_base_url instead.",
     "state_path": "Path to the state file recording last push outcome. Supports ~ expansion. Default: ~/.local/state/health-bridge/push-state.json",
     "poll_interval_seconds": "Seconds between polls in watch mode. Must be positive. Default: 900",
     "stability_delay_seconds": "Seconds between two stat checks to confirm the source file is not being written. Must be positive. Default: 5",
@@ -14,7 +15,8 @@
     "token_file": "Optional path to a file containing the token. Supports ~ expansion. Lower priority than the environment variable. Set to null to disable. Default: null"
   },
   "source_path": "/storage/emulated/0/Download/health/Gadgetbridge.db",
-  "upload_url": "https://oh-my-frontweb.duckdns.org/health/api/v1/upload",
+  "upload_base_url": "https://oh-my-frontweb.duckdns.org",
+  "upload_url": null,
   "state_path": "~/.local/state/health-bridge/push-state.json",
   "poll_interval_seconds": 900,
   "stability_delay_seconds": 5,

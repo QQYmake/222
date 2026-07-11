@@ -14,9 +14,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+_DEFAULT_BASE_URL = "https://oh-my-frontweb.duckdns.org"
+_UPLOAD_PATH = "/health/api/v1/upload"
+
+# Environment variable name for overriding the upload base URL.
+_BASE_URL_ENV_VAR = "HEALTH_UPLOAD_BASE_URL"
+
 _BUILTIN_DEFAULTS: dict[str, Any] = {
     "source_path": "/storage/emulated/0/Download/health/Gadgetbridge.db",
-    "upload_url": "https://oh-my-frontweb.duckdns.org/health/api/v1/upload",
+    "upload_base_url": _DEFAULT_BASE_URL,
     "state_path": "~/.local/state/health-bridge/push-state.json",
     "poll_interval_seconds": 900,
     "stability_delay_seconds": 5,
@@ -46,6 +52,7 @@ class PushConfig:
     max_response_bytes: int
     token_env: str
     token_file: Path | None
+    upload_base_url: str = _DEFAULT_BASE_URL
     # repr=False so the token never surfaces in logs or debug dumps.
     upload_token: str | None = field(default=None, repr=False)
 
@@ -57,13 +64,30 @@ def load_push_config(
     dry_run: bool,
 ) -> PushConfig:
     merged: dict[str, Any] = dict(_BUILTIN_DEFAULTS)
+    file_values: dict[str, Any] = {}
 
     if path is not None:
         with open(path, encoding="utf-8") as fh:
-            file_values: dict[str, Any] = json.load(fh)
+            file_values = json.load(fh)
         merged.update(file_values)
 
-    upload_url: str = merged["upload_url"]
+    # Resolve the upload base URL.  Priority (highest first):
+    #   1. HEALTH_UPLOAD_BASE_URL environment variable
+    #   2. upload_base_url from the config file
+    #   3. Built-in default
+    upload_base_url: str = (
+        environ.get(_BASE_URL_ENV_VAR)
+        or merged.get("upload_base_url", _DEFAULT_BASE_URL)
+    )
+
+    # Determine the final upload_url.  If the config file explicitly
+    # provides upload_url, it takes full precedence (backward compat).
+    # Otherwise, construct it from the resolved base URL.
+    if "upload_url" in file_values:
+        upload_url: str = file_values["upload_url"]
+    else:
+        upload_url = upload_base_url.rstrip("/") + _UPLOAD_PATH
+
     _require_https(upload_url)
 
     poll_interval = float(merged["poll_interval_seconds"])
@@ -109,6 +133,7 @@ def load_push_config(
         max_response_bytes=max_response,
         token_env=token_env,
         token_file=token_file,
+        upload_base_url=upload_base_url,
         upload_token=upload_token,
     )
 

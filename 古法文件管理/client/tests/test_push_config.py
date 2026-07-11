@@ -369,6 +369,137 @@ class TokenLeakageTests(unittest.TestCase):
         self.assertNotIn(_LEAK_PROBE, str(cfg))
 
 
+class BaseUrlEnvVarTests(unittest.TestCase):
+    """The target domain is configurable via HEALTH_UPLOAD_BASE_URL.
+
+    Priority order (highest first):
+      1. Explicit ``upload_url`` in the config file (full backward compat)
+      2. ``HEALTH_UPLOAD_BASE_URL`` environment variable
+      3. ``upload_base_url`` in the config file
+      4. Built-in default ``https://oh-my-frontweb.duckdns.org``
+
+    When (2), (3), or (4) is used, ``upload_url`` is constructed as
+    ``<base_url>/health/api/v1/upload``.
+    """
+
+    _DEFAULT_BASE = "https://oh-my-frontweb.duckdns.org"
+    _UPLOAD_PATH = "/health/api/v1/upload"
+
+    def setUp(self):
+        self._tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    # ── default ──────────────────────────────────────────────────────
+
+    def test_default_base_url_when_no_env_no_config(self):
+        cfg = load_push_config(None, {}, dry_run=True)
+        self.assertEqual(cfg.upload_base_url, self._DEFAULT_BASE)
+        self.assertEqual(
+            cfg.upload_url,
+            self._DEFAULT_BASE + self._UPLOAD_PATH,
+        )
+
+    # ── env var override ─────────────────────────────────────────────
+
+    def test_env_var_overrides_base_url(self):
+        cfg = load_push_config(
+            None,
+            {"HEALTH_UPLOAD_BASE_URL": "https://custom.example.com"},
+            dry_run=True,
+        )
+        self.assertEqual(cfg.upload_base_url, "https://custom.example.com")
+        self.assertEqual(
+            cfg.upload_url,
+            "https://custom.example.com" + self._UPLOAD_PATH,
+        )
+
+    def test_env_var_with_trailing_slash(self):
+        cfg = load_push_config(
+            None,
+            {"HEALTH_UPLOAD_BASE_URL": "https://custom.example.com/"},
+            dry_run=True,
+        )
+        self.assertEqual(
+            cfg.upload_url,
+            "https://custom.example.com" + self._UPLOAD_PATH,
+        )
+
+    # ── config file override ─────────────────────────────────────────
+
+    def test_config_file_upload_base_url(self):
+        path = _write_json(self._tmp, "cfg.json", {
+            "upload_base_url": "https://from-config.example.com",
+        })
+        cfg = load_push_config(path, {}, dry_run=True)
+        self.assertEqual(cfg.upload_base_url, "https://from-config.example.com")
+        self.assertEqual(
+            cfg.upload_url,
+            "https://from-config.example.com" + self._UPLOAD_PATH,
+        )
+
+    # ── precedence ───────────────────────────────────────────────────
+
+    def test_env_var_overrides_config_file_base_url(self):
+        path = _write_json(self._tmp, "cfg.json", {
+            "upload_base_url": "https://from-config.example.com",
+        })
+        cfg = load_push_config(
+            path,
+            {"HEALTH_UPLOAD_BASE_URL": "https://from-env.example.com"},
+            dry_run=True,
+        )
+        self.assertEqual(cfg.upload_base_url, "https://from-env.example.com")
+        self.assertEqual(
+            cfg.upload_url,
+            "https://from-env.example.com" + self._UPLOAD_PATH,
+        )
+
+    def test_explicit_upload_url_overrides_base_url_env(self):
+        """Explicit upload_url in config file wins over env var base URL."""
+        path = _write_json(self._tmp, "cfg.json", {
+            "upload_url": "https://explicit.example.com/custom/path",
+        })
+        cfg = load_push_config(
+            path,
+            {"HEALTH_UPLOAD_BASE_URL": "https://ignored.example.com"},
+            dry_run=True,
+        )
+        self.assertEqual(
+            cfg.upload_url, "https://explicit.example.com/custom/path"
+        )
+
+    def test_explicit_upload_url_overrides_base_url_in_config(self):
+        """Explicit upload_url in config file wins over upload_base_url."""
+        path = _write_json(self._tmp, "cfg.json", {
+            "upload_url": "https://explicit.example.com/custom/path",
+            "upload_base_url": "https://ignored.example.com",
+        })
+        cfg = load_push_config(path, {}, dry_run=True)
+        self.assertEqual(
+            cfg.upload_url, "https://explicit.example.com/custom/path"
+        )
+
+    # ── HTTPS validation ─────────────────────────────────────────────
+
+    def test_reject_http_base_url_from_env(self):
+        with self.assertRaises(ValueError):
+            load_push_config(
+                None,
+                {"HEALTH_UPLOAD_BASE_URL": "http://insecure.example.com"},
+                dry_run=True,
+            )
+
+    def test_reject_http_base_url_from_config(self):
+        path = _write_json(self._tmp, "cfg.json", {
+            "upload_base_url": "http://insecure.example.com",
+        })
+        with self.assertRaises(ValueError):
+            load_push_config(path, {}, dry_run=True)
+
+
 class FrozenDataclassTests(unittest.TestCase):
     """PushConfig is immutable."""
 
