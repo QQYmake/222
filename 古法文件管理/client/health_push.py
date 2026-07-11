@@ -14,8 +14,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from health_bridge.push_config import PushConfig, load_push_config
-from health_bridge.push_service import PushOutcome, run_once, run_watch
+from clients.health_bridge.push_config import PushConfig, load_push_config
+from clients.health_bridge.push_service import PushOutcome, run_once, run_watch
 
 logger = logging.getLogger("health_bridge.cli")
 

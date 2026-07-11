@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from health_bridge.push_config import PushConfig, load_push_config
+from clients.health_bridge.push_config import PushConfig, load_push_config
 
 # A sentinel token used to verify it never leaks into messages or repr.
 _LEAK_PROBE = "LEAK-PROBE-zzz999zzz"

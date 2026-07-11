@@ -13,7 +13,7 @@ import pytest
 # Add client dir to path for imports.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from health_pull import main, build_parser
+from client.health_pull import main, build_parser
 
 
 class TestCLIArgumentParsing:
@@ -96,7 +96,7 @@ class TestCLIIntegration:
     """Full CLI integration with mocked transport."""
 
     def test_latest_command(self, capsys):
-        with patch("health_pull.PullTransport") as MockTransport:
+        with patch("client.health_pull.PullTransport") as MockTransport:
             mock_instance = MockTransport.return_value
             mock_instance.get.return_value = json.dumps({
                 "heart_rate": {"value": {"bpm": 84}, "timestamp_utc": "2026-07-11T06:35:00+00:00"},
@@ -115,7 +115,7 @@ class TestCLIIntegration:
             assert data["heart_rate"]["value"]["bpm"] == 84
 
     def test_weeks_command(self, capsys):
-        with patch("health_pull.PullTransport") as MockTransport:
+        with patch("client.health_pull.PullTransport") as MockTransport:
             mock_instance = MockTransport.return_value
             mock_instance.get.return_value = json.dumps({"weeks": ["2026-W28"]}).encode()
 
@@ -132,7 +132,7 @@ class TestCLIIntegration:
             assert data["weeks"] == ["2026-W28"]
 
     def test_archive_command(self, capsys):
-        with patch("health_pull.PullTransport") as MockTransport:
+        with patch("client.health_pull.PullTransport") as MockTransport:
             mock_instance = MockTransport.return_value
             mock_instance.get.return_value = b"# Health Archive 2026-W28\n..."
 
@@ -148,7 +148,7 @@ class TestCLIIntegration:
             assert "2026-W28" in captured.out
 
     def test_range_command(self, capsys):
-        with patch("health_pull.PullTransport") as MockTransport:
+        with patch("client.health_pull.PullTransport") as MockTransport:
             mock_instance = MockTransport.return_value
             mock_instance.get.return_value = json.dumps({
                 "observations": [
@@ -170,7 +170,7 @@ class TestCLIIntegration:
             assert len(data["observations"]) == 1
 
     def test_output_to_file(self, tmp_path):
-        with patch("health_pull.PullTransport") as MockTransport:
+        with patch("client.health_pull.PullTransport") as MockTransport:
             mock_instance = MockTransport.return_value
             mock_instance.get.return_value = json.dumps({"weeks": ["2026-W28"]}).encode()
 

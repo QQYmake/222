@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from health_bridge.push_state import PushState, load_state, save_state
+from clients.health_bridge.push_state import PushState, load_state, save_state
 
 
 class _TempDirCase(unittest.TestCase):

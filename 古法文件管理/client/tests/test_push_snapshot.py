@@ -14,8 +14,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from health_bridge.push_config import PushConfig
-from health_bridge.push_snapshot import PreparedSnapshot, prepare_snapshot
+from clients.health_bridge.push_config import PushConfig
+from clients.health_bridge.push_snapshot import PreparedSnapshot, prepare_snapshot
 
 
 def _make_sqlite_db(path: Path) -> None:
@@ -237,7 +237,7 @@ class TestCleanup(_TempDirCase):
         bad_path.write_bytes(b"NOT SQLITE" + b"\x00" * 50)
         config = _make_config(source_path=bad_path)
 
-        import health_bridge.push_snapshot as snap_module
+        import clients.health_bridge.push_snapshot as snap_module
 
         created_dirs: list[Path] = []
         original_tempdir = snap_module.TemporaryDirectory

@@ -14,9 +14,9 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from health_bridge.push_config import PushConfig
-from health_bridge.push_snapshot import PreparedSnapshot
-from health_bridge.push_transport import (
+from clients.health_bridge.push_config import PushConfig
+from clients.health_bridge.push_snapshot import PreparedSnapshot
+from clients.health_bridge.push_transport import (
     PermanentUploadError,
     TransientUploadError,
     UploadResult,

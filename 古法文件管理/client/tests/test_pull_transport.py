@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from health_bridge.pull_config import PullConfig
-from health_bridge.pull_transport import (
+from clients.health_bridge.pull_config import PullConfig
+from clients.health_bridge.pull_transport import (
     AuthError,
     NotFoundError,
     PullTransport,

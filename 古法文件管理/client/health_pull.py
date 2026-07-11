@@ -27,22 +27,22 @@ import os
 import sys
 from pathlib import Path
 
-from health_bridge.pull_config import PullConfig, load_pull_config
-from health_bridge.pull_transport import (
+from clients.health_bridge.pull_config import PullConfig, load_pull_config
+from clients.health_bridge.pull_transport import (
     PullTransport,
     AuthError,
     NotFoundError,
     TransientError,
     TransportError,
 )
-from health_bridge.pull_commands import (
+from clients.health_bridge.pull_commands import (
     cmd_latest,
     cmd_range,
     cmd_weeks,
     cmd_archive,
 )
-from health_bridge.pull_output import output_json, output_text
-from health_bridge.pull_watch import watch_loop
+from clients.health_bridge.pull_output import output_json, output_text
+from clients.health_bridge.pull_watch import watch_loop
 
 logger = logging.getLogger("health_bridge.pull_cli")
 

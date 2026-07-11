@@ -15,9 +15,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from health_bridge.pull_config import PullConfig
-from health_bridge.pull_transport import PullTransport
-from health_bridge.pull_commands import cmd_latest
+from clients.health_bridge.pull_config import PullConfig
+from clients.health_bridge.pull_transport import PullTransport
+from clients.health_bridge.pull_commands import cmd_latest
 
 
 def watch_once(

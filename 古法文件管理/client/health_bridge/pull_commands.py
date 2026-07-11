@@ -9,8 +9,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from health_bridge.pull_config import PullConfig
-from health_bridge.pull_transport import PullTransport
+from clients.health_bridge.pull_config import PullConfig
+from clients.health_bridge.pull_transport import PullTransport
 
 
 @dataclass(frozen=True)
