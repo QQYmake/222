@@ -18,16 +18,16 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 from unittest.mock import patch
 
-from clients.health_bridge.push_config import PushConfig
-from clients.health_bridge.push_service import (
+from health_bridge.push_config import PushConfig
+from health_bridge.push_service import (
     Dependencies,
     PushOutcome,
     run_once,
     run_watch,
 )
-from clients.health_bridge.push_snapshot import PreparedSnapshot
-from clients.health_bridge.push_state import PushState, load_state, save_state
-from clients.health_bridge.push_transport import (
+from health_bridge.push_snapshot import PreparedSnapshot
+from health_bridge.push_state import PushState, load_state, save_state
+from health_bridge.push_transport import (
     PermanentUploadError,
     TransientUploadError,
     UploadResult,

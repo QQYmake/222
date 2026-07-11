@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from clients.health_bridge.pull_config import PullConfig
-from clients.health_bridge.pull_commands import (
+from health_bridge.pull_config import PullConfig
+from health_bridge.pull_commands import (
     cmd_latest,
     cmd_range,
     cmd_weeks,
