@@ -5,5 +5,16 @@ project_type = ""
 [preview]
 preview_enable = "disabled"
 
+[deploy]
+build = ["bash", "vps-gateway/scripts/setup.sh"]
+run = ["bash", "vps-gateway/scripts/http_run.sh", "-p", "5000"]
+
+[deploy.profile]
+kind = "service"
+flavor = "web"
+
+[deploy.backend]
+enabled = true
+
 [subprojects]
 path = ["vps-gateway"]
