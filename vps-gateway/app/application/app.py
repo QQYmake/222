@@ -24,7 +24,26 @@ from app.adapters.outbox.sqlite_outbox_store import SQLiteOutboxStore
 from app.adapters.http.chat_controller import create_chat_router
 from app.adapters.http.outbox_controller import create_outbox_router
 from app.adapters.scheduler.local_scheduler import LocalScheduler
+from app.adapters.tools.registry import ToolRegistry
+from app.adapters.tools.tool_dispatcher import ToolDispatcher
+from app.adapters.tools.wake_tool_definitions import (
+    SCHEDULE_WAKEUP_DEF,
+    LIST_WAKEUPS_DEF,
+    CANCEL_WAKEUP_DEF,
+)
+from app.adapters.tools.wake_tools import (
+    ScheduleWakeupExecutor,
+    ListWakeupsExecutor,
+    CancelWakeupExecutor,
+)
+from app.adapters.wakeups.sqlite_wake_job_store import SQLiteWakeJobStore
 from app.application.turn_runner import TurnRunner
+from app.application.model_tool_loop import ModelToolLoop
+from app.application.active_turn_gate import ActiveTurnGate
+from app.application.wake_start_policy import WakeStartPolicy
+from app.application.schedule_admission_policy import ScheduleAdmissionPolicy
+from app.application.wake_planner import WakePlanner
+from app.application.wake_controller import WakeController
 from app.domain.models.context_builder import ContextBuilder
 from app.infrastructure.logging import get_logger
 
@@ -59,15 +78,123 @@ def create_app(config=None) -> FastAPI:
     async_model_client = AsyncOpenAIUpstreamClient(config=config)
     outbox_store = SQLiteOutboxStore(config.outbox_database_path)
 
+    # 1b. 唤醒任务存储
+    wake_job_store = SQLiteWakeJobStore(config.wake_jobs_database_path)
+
+    # 1c. 工具注册表 — 注册唤醒工具
+    tool_registry = ToolRegistry(test_tools_enabled=False)
+    schedule_admission_policy = ScheduleAdmissionPolicy()
+    tool_registry.register(
+        SCHEDULE_WAKEUP_DEF,
+        ScheduleWakeupExecutor(wake_job_store, schedule_admission_policy),
+    )
+    tool_registry.register(
+        LIST_WAKEUPS_DEF,
+        ListWakeupsExecutor(wake_job_store),
+    )
+    tool_registry.register(
+        CANCEL_WAKEUP_DEF,
+        CancelWakeupExecutor(wake_job_store),
+    )
+
+    # 1d. 工具调度器 + 模型工具循环
+    tool_dispatcher = ToolDispatcher(tool_registry)
+    model_tool_loop = ModelToolLoop(
+        model_client=async_model_client,
+        dispatcher=tool_dispatcher,
+    )
+
     # 2. 领域服务
     context_builder = ContextBuilder(memory_char_budget=config.memory_char_budget)
 
-    # 3. 应用编排 — 注入 async model client
+    # 2b. 记忆引擎（如果启用）
+    memory_port = None
+    memory_recall_executor = None
+    if config.memory_enabled:
+        from app.domain.ports.memory_engine import MemoryEngineConfig
+        from app.application.memory.memory_engine import MemoryEngine
+        from app.application.memory.buffer_manager import BufferManager
+        from app.adapters.memory.sqlite_buffer_store import SQLiteBufferStore
+        from app.adapters.tools.memory_recall_tool import MemoryRecallExecutor
+
+        buffer_store = SQLiteBufferStore(config.memory_db_path)
+
+        mem_config = MemoryEngineConfig(
+            db_path=config.memory_db_path,
+            retrieval_timeout=config.memory_retrieval_timeout,
+            surface_interval=config.memory_surface_interval,
+            consolidation_hour=config.memory_consolidation_hour,
+            enabled=True,
+            embed_type=config.mem_embed_type,
+            embed_model=config.mem_embed_model,
+            intent_model_config={
+                "base_url": config.mem_intent_base_url,
+                "api_key": config.mem_intent_api_key,
+                "model": config.mem_intent_model,
+            },
+            gen_model_config={
+                "base_url": config.mem_gen_base_url,
+                "api_key": config.mem_gen_api_key,
+                "model": config.mem_gen_model,
+            },
+            surf_model_config={
+                "base_url": config.mem_surf_base_url,
+                "api_key": config.mem_surf_api_key,
+                "model": config.mem_surf_model,
+            },
+            extract_model_config={
+                "base_url": config.mem_extract_base_url,
+                "api_key": config.mem_extract_api_key,
+                "model": config.mem_extract_model,
+            },
+            persona_model_config={
+                "base_url": config.mem_persona_base_url,
+                "api_key": config.mem_persona_api_key,
+                "model": config.mem_persona_model,
+            },
+            saga_model_config={
+                "base_url": config.mem_saga_base_url,
+                "api_key": config.mem_saga_api_key,
+                "model": config.mem_saga_model,
+            },
+            polish_model_config={
+                "base_url": config.mem_polish_base_url,
+                "api_key": config.mem_polish_api_key,
+                "model": config.mem_polish_model,
+            },
+        )
+        buffer_manager = BufferManager(buffer_store)
+        memory_port = MemoryEngine(
+            config=mem_config,
+            buffer_manager=buffer_manager,
+        )
+        memory_recall_executor = MemoryRecallExecutor(memory_port)
+
+        # 注册 memory_recall 工具（仅主动唤醒回合暴露）
+        from app.adapters.tools.memory_recall_tool import MEMORY_RECALL_DEF
+        tool_registry.register(MEMORY_RECALL_DEF, memory_recall_executor)
+        tool_registry.register_for_wake_only(MEMORY_RECALL_DEF.name)
+
+    # 3. 应用编排 — 注入 async model client + tool_registry + model_tool_loop + memory_port
     turn_runner = TurnRunner(
         sample_reader=sample_reader,
         context_builder=context_builder,
         model_client=async_model_client,
         outbox_store=outbox_store,
+        tool_registry=tool_registry,
+        model_tool_loop=model_tool_loop,
+        memory_port=memory_port,
+    )
+
+    # 3b. 主动回合组件
+    active_turn_gate = ActiveTurnGate()
+    wake_start_policy = WakeStartPolicy()
+    wake_planner = WakePlanner(store=wake_job_store, policy=schedule_admission_policy)
+    wake_controller = WakeController(
+        store=wake_job_store,
+        gate=active_turn_gate,
+        start_policy=wake_start_policy,
+        turn_runner=turn_runner,
     )
 
     # 4. 调度器 — 不在构造时启动
@@ -137,5 +264,15 @@ def create_app(config=None) -> FastAPI:
     app.state.config = config
     app.state.async_model_client = async_model_client
     app.state.scheduler_started = False
+    app.state.tool_registry = tool_registry
+    app.state.tool_dispatcher = tool_dispatcher
+    app.state.model_tool_loop = model_tool_loop
+    app.state.wake_job_store = wake_job_store
+    app.state.active_turn_gate = active_turn_gate
+    app.state.wake_start_policy = wake_start_policy
+    app.state.schedule_admission_policy = schedule_admission_policy
+    app.state.wake_planner = wake_planner
+    app.state.wake_controller = wake_controller
+    app.state.turn_runner = turn_runner
 
     return app

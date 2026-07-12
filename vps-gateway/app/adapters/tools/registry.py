@@ -25,6 +25,7 @@ class ToolRegistry:
     def __init__(self, test_tools_enabled: bool = False):
         self._definitions: dict[str, ToolDefinition] = {}
         self._executors: dict[str, ToolExecutor] = {}
+        self._wake_only: set[str] = set()
         self._test_tools_enabled = test_tools_enabled
         self._logger = get_logger("tool_registry")
 
@@ -81,3 +82,37 @@ class ToolRegistry:
     def get_definition(self, name: str) -> ToolDefinition | None:
         """按名称获取工具定义。"""
         return self._definitions.get(name)
+
+    def register_for_wake_only(self, name: str) -> None:
+        """标记工具仅主动唤醒回合暴露。
+
+        指令：
+          1. 工具必须已注册
+          2. 加入 _wake_only 集合
+          3. schemas_for_user 排除该工具
+          4. schemas_for_wake 包含该工具
+        """
+        if name not in self._definitions:
+            raise ValueError(f"unknown tool: {name}")
+        self._wake_only.add(name)
+        self._logger.info("tool_marked_wake_only", extra={"tool_name": name})
+
+    def schemas_for_user(self) -> list[dict]:
+        """返回用户回合允许暴露的工具 Schema 列表。
+
+        排除 wake-only 工具。
+        """
+        result: list[dict] = []
+        for schema in self.schemas():
+            name = schema["function"]["name"]
+            if name in self._wake_only:
+                continue
+            result.append(schema)
+        return result
+
+    def schemas_for_wake(self) -> list[dict]:
+        """返回主动唤醒回合允许暴露的工具 Schema 列表。
+
+        包含所有已注册工具（含 wake-only）。
+        """
+        return self.schemas()

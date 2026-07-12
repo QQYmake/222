@@ -110,6 +110,52 @@ def render_state_xml(samples: AllSamples, memory_items: list[MemoryItem]) -> str
     return f"<chen_state>{identity_xml}{preferences_xml}{memories_xml}{working_state_xml}</chen_state>"
 
 
+def render_state_xml_with_memory_text(samples: AllSamples, memory_text: str) -> str:
+    """渲染 <chen_state> 状态块，<memories> 由记忆引擎提供。
+
+    指令:
+      1. 固定顺序: identity → preferences → memories → working_state
+      2. memories 块内容直接使用 memory_text（已润色）
+      3. 其他块与 render_state_xml 一致
+    """
+    ident = samples.identity.data
+    prefs = samples.preferences.data
+    ws = samples.working_state.data
+
+    identity_xml = (
+        "<identity>"
+        + render_xml_block("name", ident.name)
+        + render_xml_block("self_description", ident.self_description)
+        + _render_string_list("values", ident.values)
+        + _render_string_list("boundaries", ident.boundaries)
+        + render_xml_block("relationship_definition", ident.relationship_definition)
+        + "</identity>"
+    )
+
+    preferences_xml = (
+        "<user_preferences>"
+        + _render_string_list("communication_preferences", prefs.communication_preferences)
+        + _render_string_list("stable_likes", prefs.stable_likes)
+        + _render_string_list("stable_dislikes", prefs.stable_dislikes)
+        + _render_string_list("interaction_rules", prefs.interaction_rules)
+        + "</user_preferences>"
+    )
+
+    # V3: memories 块内容由记忆引擎提供
+    memories_xml = f"<memories>{xml_escape(memory_text)}</memories>"
+
+    working_state_xml = (
+        "<working_state>"
+        + _render_string_list("current_focus", ws.current_focus)
+        + render_xml_block("emotion_summary", ws.emotion_summary)
+        + _render_string_list("pending_items", ws.pending_items)
+        + render_xml_block("next_wake_at", ws.next_wake_at or "")
+        + "</working_state>"
+    )
+
+    return f"<chen_state>{identity_xml}{preferences_xml}{memories_xml}{working_state_xml}</chen_state>"
+
+
 # --- 记忆排序与预算 ---
 
 def sort_memories(items: list[MemoryItem]) -> list[MemoryItem]:
@@ -181,13 +227,14 @@ class ContextBuilder:
         self._base_prompt = base_prompt
         self._memory_char_budget = memory_char_budget
 
-    def build(self, samples: AllSamples, trigger: UserTrigger | TimerTrigger) -> PreparedTurn:
+    def build(self, samples: AllSamples, trigger: UserTrigger | TimerTrigger,
+              memory_recall_text: str | None = None) -> PreparedTurn:
         """构建上游请求消息序列。
 
         指令:
-          1. 排序记忆: sort_memories(samples.memories.data.items)
-          2. 截断记忆: fit_within_budget(sorted, self._memory_char_budget)
-          3. 渲染状态块: render_state_xml(samples, memory_items)
+          1. 如果 memory_recall_text 提供且非空，用它替换 <memories> 块
+          2. 否则: 排序记忆 + 截断记忆（v2 行为）
+          3. 渲染状态块
           4. 提取前端指令 (被动回合) 或空 (主动回合)
           5. 渲染 supplemental 块
           6. 合并为 server system message
@@ -195,12 +242,14 @@ class ContextBuilder:
           8. 主动回合: [server_system, timer_user_message]
           9. 收集 sample_versions
         """
-        # 1-2. 排序 + 截断记忆
-        memory_items = sort_memories(samples.memories.data.items)
-        memory_items = fit_within_budget(memory_items, self._memory_char_budget)
-
-        # 3. 渲染状态块
-        state_block = render_state_xml(samples, memory_items)
+        if memory_recall_text:
+            # V3: <memories> 来源由记忆引擎接管
+            state_block = render_state_xml_with_memory_text(samples, memory_recall_text)
+        else:
+            # V2 行为：使用 sample memories
+            memory_items = sort_memories(samples.memories.data.items)
+            memory_items = fit_within_budget(memory_items, self._memory_char_budget)
+            state_block = render_state_xml(samples, memory_items)
 
         # 4. 提取前端指令
         frontend_instructions = ""

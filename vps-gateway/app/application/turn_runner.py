@@ -57,12 +57,33 @@ class TurnRunner:
         context_builder: ContextBuilder,
         model_client: ModelClient | AsyncModelClient,
         outbox_store=None,
+        tool_registry=None,
+        model_tool_loop=None,
+        memory_port=None,
     ):
         self._sample_reader = sample_reader
         self._context_builder = context_builder
         self._model_client = model_client
         self._outbox_store = outbox_store
+        self._tool_registry = tool_registry
+        self._model_tool_loop = model_tool_loop
+        self._memory_port = memory_port
         self._logger = get_logger("turn_runner")
+
+    @property
+    def tool_registry(self):
+        """暴露 tool_registry 供测试断言。"""
+        return self._tool_registry
+
+    @property
+    def model_tool_loop(self):
+        """暴露 model_tool_loop 供测试断言。"""
+        return self._model_tool_loop
+
+    @property
+    def memory_port(self):
+        """暴露 memory_port 供测试断言。"""
+        return self._memory_port
 
     def run(self, trigger: UserTrigger | TimerTrigger):
         """执行一个回合（v1 同步兼容）。
@@ -129,8 +150,30 @@ class TurnRunner:
         # 1. 读取 Sample
         samples = self._sample_reader.read_all()
 
+        # 1b. 记忆引擎 recall（如果启用）
+        memory_recall_text = None
+        if self._memory_port is not None:
+            try:
+                raw_messages = trigger.chat_request.get("messages", [])
+                recall = await self._memory_port.recall(trigger, raw_messages)
+                memory_recall_text = recall.text if recall and recall.text else None
+                self._logger.info("memory_recall_completed", extra={
+                    "turn_id": turn_id,
+                    "request_id": trigger.request_id,
+                    "recall_mode": recall.mode if recall else None,
+                    "recall_degraded": recall.degraded if recall else False,
+                })
+            except Exception as e:
+                self._logger.warning("memory_recall_failed", extra={
+                    "turn_id": turn_id,
+                    "request_id": trigger.request_id,
+                    "error": str(e),
+                })
+
         # 2. 构造上下文
-        prepared = self._context_builder.build(samples, trigger)
+        prepared = self._context_builder.build(
+            samples, trigger, memory_recall_text=memory_recall_text
+        )
 
         # 3. 调用异步模型
         response = await self._model_client.complete(
@@ -143,6 +186,17 @@ class TurnRunner:
 
         # 4. 日志
         self._log_turn_async(trigger, prepared.sample_versions, response, started_at, turn_id)
+
+        # 4b. 记忆引擎 after_turn（如果启用）
+        if self._memory_port is not None:
+            try:
+                await self._memory_port.after_turn(trigger, response)
+            except Exception as e:
+                self._logger.warning("memory_after_turn_failed", extra={
+                    "turn_id": turn_id,
+                    "request_id": trigger.request_id,
+                    "error": str(e),
+                })
 
         return response
 

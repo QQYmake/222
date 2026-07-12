@@ -54,9 +54,42 @@ class Config:
     active_turn_interval_minutes: int
     active_turn_instruction: str
 
+    # --- 唤醒任务存储 ---
+    wake_jobs_database_path: str
+
     # --- 默认参数 ---
     default_temperature: float
     default_max_output_tokens: int
+
+    # --- v3 记忆引擎 ---
+    memory_enabled: bool
+    memory_db_path: str
+    memory_retrieval_timeout: float
+    memory_surface_interval: float
+    memory_consolidation_hour: int
+    mem_embed_type: str
+    mem_embed_model: str
+    mem_intent_base_url: str
+    mem_intent_api_key: str
+    mem_intent_model: str
+    mem_gen_base_url: str
+    mem_gen_api_key: str
+    mem_gen_model: str
+    mem_surf_base_url: str
+    mem_surf_api_key: str
+    mem_surf_model: str
+    mem_extract_base_url: str
+    mem_extract_api_key: str
+    mem_extract_model: str
+    mem_persona_base_url: str
+    mem_persona_api_key: str
+    mem_persona_model: str
+    mem_saga_base_url: str
+    mem_saga_api_key: str
+    mem_saga_model: str
+    mem_polish_base_url: str
+    mem_polish_api_key: str
+    mem_polish_model: str
 
     @classmethod
     def load_from_env(cls) -> "Config":
@@ -102,12 +135,56 @@ class Config:
                 "ACTIVE_TURN_INSTRUCTION",
                 "检查当前状态，判断是否有值得主动告诉用户的内容。",
             ),
+            wake_jobs_database_path=os.environ.get(
+                "WAKE_JOBS_DATABASE_PATH", "./data/wake_jobs.sqlite3"
+            ),
             default_temperature=_parse_float(
                 os.environ.get("DEFAULT_TEMPERATURE", "0.7"), 0.7
             ),
             default_max_output_tokens=_parse_int(
                 os.environ.get("DEFAULT_MAX_OUTPUT_TOKENS", "1200"), 1200
             ),
+            # --- v3 记忆引擎 ---
+            memory_enabled=_parse_bool(
+                os.environ.get("MEMORY_ENABLED", "false")
+            ),
+            memory_db_path=os.environ.get(
+                "MEMORY_DB_PATH", "./data/memory.sqlite3"
+            ),
+            memory_retrieval_timeout=_parse_float(
+                os.environ.get("MEMORY_RETRIEVAL_TIMEOUT", "20.0"), 20.0
+            ),
+            memory_surface_interval=_parse_float(
+                os.environ.get("MEMORY_SURFACE_INTERVAL", "3600.0"), 3600.0
+            ),
+            memory_consolidation_hour=_parse_int(
+                os.environ.get("MEMORY_CONSOLIDATION_HOUR", "2"), 2
+            ),
+            mem_embed_type=os.environ.get("MEM_EMBED_TYPE", "local"),
+            mem_embed_model=os.environ.get(
+                "MEM_EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
+            ),
+            mem_intent_base_url=os.environ.get("MEM_INTENT_BASE_URL", ""),
+            mem_intent_api_key=os.environ.get("MEM_INTENT_API_KEY", ""),
+            mem_intent_model=os.environ.get("MEM_INTENT_MODEL", ""),
+            mem_gen_base_url=os.environ.get("MEM_GEN_BASE_URL", ""),
+            mem_gen_api_key=os.environ.get("MEM_GEN_API_KEY", ""),
+            mem_gen_model=os.environ.get("MEM_GEN_MODEL", ""),
+            mem_surf_base_url=os.environ.get("MEM_SURF_BASE_URL", ""),
+            mem_surf_api_key=os.environ.get("MEM_SURF_API_KEY", ""),
+            mem_surf_model=os.environ.get("MEM_SURF_MODEL", ""),
+            mem_extract_base_url=os.environ.get("MEM_EXTRACT_BASE_URL", ""),
+            mem_extract_api_key=os.environ.get("MEM_EXTRACT_API_KEY", ""),
+            mem_extract_model=os.environ.get("MEM_EXTRACT_MODEL", ""),
+            mem_persona_base_url=os.environ.get("MEM_PERSONA_BASE_URL", ""),
+            mem_persona_api_key=os.environ.get("MEM_PERSONA_API_KEY", ""),
+            mem_persona_model=os.environ.get("MEM_PERSONA_MODEL", ""),
+            mem_saga_base_url=os.environ.get("MEM_SAGA_BASE_URL", ""),
+            mem_saga_api_key=os.environ.get("MEM_SAGA_API_KEY", ""),
+            mem_saga_model=os.environ.get("MEM_SAGA_MODEL", ""),
+            mem_polish_base_url=os.environ.get("MEM_POLISH_BASE_URL", ""),
+            mem_polish_api_key=os.environ.get("MEM_POLISH_API_KEY", ""),
+            mem_polish_model=os.environ.get("MEM_POLISH_MODEL", ""),
         )
 
     def validate(self) -> None:
