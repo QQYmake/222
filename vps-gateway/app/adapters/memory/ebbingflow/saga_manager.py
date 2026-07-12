@@ -16,7 +16,7 @@ class SagaManager:
     """Discover and evolve long-running sagas from episodes."""
 
     def __init__(self):
-        self.bridge = LLMBridge(memory_llm_config, category="memory")
+        self.bridge = LLMBridge(memory_llm_config, category="saga")
 
     async def cluster_episodes_into_saga(
         self,

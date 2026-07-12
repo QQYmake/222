@@ -116,6 +116,12 @@ def create_app(config=None) -> FastAPI:
         from app.application.memory.buffer_manager import BufferManager
         from app.adapters.memory.sqlite_buffer_store import SQLiteBufferStore
         from app.adapters.tools.memory_recall_tool import MemoryRecallExecutor
+        from app.adapters.memory.ebbingflow.llm_bridge import LLMBridge, LLMBridgeConfig
+        from app.application.memory.intent_classifier import IntentClassifier
+        from app.application.memory.retrieval_pipeline import RetrievalPipeline
+        from app.application.memory.surface_generator import SurfaceGenerator
+        from app.application.memory.consolidation_pipeline import ConsolidationPipeline
+        from app.application.memory.polish_bridge import PolishBridge
 
         buffer_store = SQLiteBufferStore(config.memory_db_path)
 
@@ -163,10 +169,79 @@ def create_app(config=None) -> FastAPI:
                 "model": config.mem_polish_model,
             },
         )
+
         buffer_manager = BufferManager(buffer_store)
+
+        # 创建 LLMBridge 实例（使用 gen 模型配置作为默认记忆 LLM）
+        gen_cfg = mem_config.gen_model_config
+        llm_bridge = LLMBridge(
+            config=LLMBridgeConfig(
+                base_url=gen_cfg["base_url"],
+                api_key=gen_cfg["api_key"],
+                model=gen_cfg["model"],
+            ),
+            category="memory",
+        )
+
+        # 润色桥
+        polish_bridge = PolishBridge(llm_bridge=llm_bridge)
+
+        # 意图分类器
+        intent_classifier = IntentClassifier(llm_bridge=llm_bridge)
+
+        # 检索管线（@4 查询路径）
+        retrieval_pipeline = RetrievalPipeline(
+            llm_bridge=llm_bridge,
+            buffer_manager=buffer_manager,
+            polish_bridge=polish_bridge,
+        )
+
+        # @e 周期生成器
+        surface_generator = SurfaceGenerator(
+            llm_bridge=llm_bridge,
+            buffer_manager=buffer_manager,
+            polish_bridge=polish_bridge,
+        )
+
+        # 沉淀管线（依赖较多，使用延迟导入）
+        try:
+            from app.adapters.memory.sqlite_graph_store import SQLiteGraphStore
+            from app.adapters.memory.sqlite_persona_store import SQLitePersonaStore
+            from app.adapters.memory.ebbingflow.event_extractor import EventExtractor
+            from app.adapters.memory.ebbingflow.persona_manager import PersonaManager
+            from app.adapters.memory.ebbingflow.saga_manager import SagaManager
+            from app.adapters.memory.ebbingflow.vector_storer import VectorStorer
+
+            graph_store = SQLiteGraphStore(config.memory_db_path)
+            persona_store = SQLitePersonaStore(config.memory_db_path)
+
+            event_extractor = EventExtractor()
+            persona_manager = PersonaManager(persona_store=persona_store)
+            saga_manager = SagaManager()
+            vector_storer = VectorStorer()
+
+            consolidation_pipeline = ConsolidationPipeline(
+                buffer_manager=buffer_manager,
+                event_extractor=event_extractor,
+                persona_manager=persona_manager,
+                saga_manager=saga_manager,
+                vector_storer=vector_storer,
+                polish_bridge=polish_bridge,
+                graph_store=graph_store,
+                persona_store=persona_store,
+            )
+        except Exception as exc:
+            logger.warning("consolidation_pipeline_init_failed: %s", exc)
+            consolidation_pipeline = None
+
         memory_port = MemoryEngine(
             config=mem_config,
             buffer_manager=buffer_manager,
+            intent_classifier=intent_classifier,
+            llm_bridge=llm_bridge,
+            retrieval_pipeline=retrieval_pipeline,
+            surface_generator=surface_generator,
+            consolidation_pipeline=consolidation_pipeline,
         )
         memory_recall_executor = MemoryRecallExecutor(memory_port)
 
@@ -274,5 +349,6 @@ def create_app(config=None) -> FastAPI:
     app.state.wake_planner = wake_planner
     app.state.wake_controller = wake_controller
     app.state.turn_runner = turn_runner
+    app.state.memory_port = memory_port
 
     return app

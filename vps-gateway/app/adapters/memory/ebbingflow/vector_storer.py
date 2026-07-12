@@ -88,7 +88,7 @@ class VectorStorer:
                 metadata={"hnsw:space": "cosine"},
             )
 
-            logger.info("[VectorStorer] ChromaDB 引擎就绪 (Type: %s)", embed_config.type)
+            logger.info("[VectorStorer] ChromaDB 引擎就绪 (Type: %s)", embed_config.embed_type)
         except Exception as e:
             logger.critical("[VectorStorer] 核心初始化失败: %s", e)
             raise VectorInitError(f"无法启动向量引擎: {e}")
@@ -115,14 +115,14 @@ class VectorStorer:
             raise
 
     def _get_embedding_function(self):
-        e_type = (embed_config.type or "").lower()
+        e_type = (embed_config.embed_type or "").lower()
 
         if e_type in {"openai", "ollama"}:
-            logger.info("[EmbedFactory] 启用 OpenAI 兼容嵌入接口: %s", embed_config.model)
+            logger.info("[EmbedFactory] 启用 OpenAI 兼容嵌入接口: %s", embed_config.embed_model)
             base_fn = embedding_functions.OpenAIEmbeddingFunction(
                 api_key=embed_config.api_key,
                 api_base=embed_config.base_url,
-                model_name=embed_config.model,
+                model_name=embed_config.embed_model,
             )
 
             if "dashscope" in (embed_config.base_url or "").lower():
@@ -131,9 +131,9 @@ class VectorStorer:
 
             return base_fn
 
-        logger.info("[EmbedFactory] 启用本地 Sentence-Transformers 嵌入: %s", embed_config.model)
+        logger.info("[EmbedFactory] 启用本地 Sentence-Transformers 嵌入: %s", embed_config.embed_model)
         return embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=embed_config.model
+            model_name=embed_config.embed_model
         )
 
     def store_chat_turn(

@@ -46,16 +46,38 @@ class LLMBridge:
 
     def __init__(
         self,
-        config: LLMBridgeConfig,
+        config: Any,
         category: str = "chat",
         on_usage: Optional[Callable[[str, int, int], None]] = None,
     ):
-        self.config = config
+        # 支持 LLMBridgeConfig 或 MemoryLLMConfig（从 _config_stub 传入时）
+        # category 决定使用 MemoryLLMConfig 中的哪组配置
+        if isinstance(config, LLMBridgeConfig):
+            self.config = config
+        elif hasattr(config, f"{category}_base_url"):
+            # MemoryLLMConfig — 根据 category 提取对应配置
+            base_url = getattr(config, f"{category}_base_url", "") or getattr(config, "gen_base_url", "")
+            api_key = getattr(config, f"{category}_api_key", "") or getattr(config, "gen_api_key", "")
+            model = getattr(config, f"{category}_model", "") or getattr(config, "gen_model", "")
+            self.config = LLMBridgeConfig(base_url=base_url, api_key=api_key, model=model)
+        elif hasattr(config, "gen_base_url"):
+            # MemoryLLMConfig fallback — 使用 gen 配置
+            self.config = LLMBridgeConfig(
+                base_url=config.gen_base_url,
+                api_key=config.gen_api_key,
+                model=config.gen_model,
+            )
+        else:
+            # 假设是 LLMBridgeConfig-like
+            self.config = config
         self.category = category
         self._on_usage = on_usage
+        # 嵌入配置（从 MemoryLLMConfig 提取，供 embed() 使用）
+        self._embed_type = getattr(config, "embed_type", "api")
+        self._embed_model = getattr(config, "embed_model", "")
         logger.debug(
             "LLMBridge initialized for %s | Model: %s | Base: %s",
-            category, config.model, config.base_url,
+            category, self.config.model, self.config.base_url,
         )
 
     async def chat_completion(
@@ -103,6 +125,78 @@ class LLMBridge:
             return data["choices"][0]["message"]["content"]
         except Exception as e:
             logger.error("[LLMBridge] ChatCompletion Error: %s", e)
+            return None
+
+    async def classify_intent(self, text: str) -> Optional[str]:
+        """意图分类 LLM 调用。返回 LLM 输出的 label 文本，失败返回 None。"""
+        messages = [
+            {"role": "system", "content": "你是意图分类器。只回复一个词：query、no_query 或 unknown。"},
+            {"role": "user", "content": text},
+        ]
+        return await self.chat_completion(messages, temperature=0.0)
+
+    async def generate(
+        self,
+        messages: Optional[List[Dict[str, str]]] = None,
+        *,
+        prompt: Optional[str] = None,
+        context: Optional[str] = None,
+        temperature: Optional[float] = None,
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """通用文本生成。支持 messages 列表或 prompt/context 快捷参数。"""
+        if messages is None:
+            msg_list: List[Dict[str, str]] = []
+            if context:
+                msg_list.append({"role": "system", "content": context})
+            if prompt:
+                msg_list.append({"role": "user", "content": prompt})
+            if not msg_list:
+                return None
+            messages = msg_list
+        return await self.chat_completion(messages, temperature=temperature)
+
+    async def embed(self, text: str) -> Optional[List[float]]:
+        """文本嵌入。
+
+        优先使用本地 Sentence-Transformers（当 embed_type == 'local'）。
+        如果本地不可用，回退到 API embedding 端点。
+        两者均失败时返回 None（调用方需降级处理）。
+        """
+        # 尝试本地嵌入
+        embed_type = getattr(self, "_embed_type", "api")
+        embed_model = getattr(self, "_embed_model", "")
+        if embed_type == "local" and embed_model:
+            try:
+                from sentence_transformers import SentenceTransformer
+                if not hasattr(self, "_st_model"):
+                    self._st_model = SentenceTransformer(embed_model)
+                vec = self._st_model.encode(text)
+                return vec.tolist()
+            except ImportError:
+                logger.debug("[LLMBridge] sentence_transformers not installed, falling back to API embed")
+            except Exception as e:
+                logger.warning("[LLMBridge] Local embed error: %s", e)
+
+        # 回退到 API embedding
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {"model": self.config.model, "input": text}
+            async with httpx.AsyncClient(timeout=self.config.timeout) as client:
+                resp = await client.post(
+                    f"{self.config.base_url}/embeddings",
+                    json=payload,
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            return data["data"][0]["embedding"]
+        except Exception as e:
+            logger.warning("[LLMBridge] Embed error: %s", e)
+            return None
             return None
 
     async def chat_stream(

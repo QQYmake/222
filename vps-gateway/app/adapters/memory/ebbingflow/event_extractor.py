@@ -17,7 +17,7 @@ class EventExtractor:
     """Extract events, entity relations, and v3 persona observations from text."""
 
     def __init__(self):
-        self.bridge = LLMBridge(memory_llm_config, category="memory")
+        self.bridge = LLMBridge(memory_llm_config, category="extract")
         self.confidence_threshold = memory_config.event_confidence_threshold
 
         self.instruction_prompt = (
