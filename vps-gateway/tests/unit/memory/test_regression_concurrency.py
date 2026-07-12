@@ -229,14 +229,13 @@ class TestEmptyMemoryTriStateCorrected:
         samples = make_samples()
         cb = ContextBuilder(memory_char_budget=10000)
 
-        # 模拟 TurnRunner 的行为：recall 返回 text="" → memory_recall_text
+        # 模拟修复后的 TurnRunner 行为：
+        # recall 返回 text="" → memory_recall_text = "" (保留空字符串，不转为 None)
         recall = PortMemoryRecall(mode="no_query", text="", source_recall_ids=[])
 
-        # 当前实现：recall.text 为空字符串 → falsy → memory_recall_text = None
-        memory_recall_text = recall.text if recall and recall.text else None
+        # 修复后：只有 recall is None 时才回退；空字符串保留
+        memory_recall_text = recall.text if recall is not None else None
 
-        # 架构约定：空 text 应生成空 <memories>，而非回退 Sample
-        # 当前实现传 None 给 ContextBuilder，会回退 Sample —— 这是 BUG
         prepared = cb.build(samples, make_user_trigger(), memory_recall_text=memory_recall_text)
 
         system_msg = prepared.messages[0].content
@@ -244,7 +243,7 @@ class TestEmptyMemoryTriStateCorrected:
         # 正确行为：空 <memories></memories>，不含种子记忆
         assert "种子记忆" not in system_msg, (
             "BUG: empty @e causes seed memory injection instead of empty <memories>. "
-            "TurnRunner line 159 converts empty text to None, causing Sample fallback."
+            "TurnRunner should preserve empty string, not convert to None."
         )
         assert "<memories></memories>" in system_msg, (
             "Empty memory recall should produce empty <memories> block"
@@ -580,12 +579,13 @@ class TestRawMessageTypeContract:
         )
 
         raw_entries = await buffer.read_all_raw()
-        # getattr(dict, "content", "") 返回 ""，所以 dict 消息不会被写入 @a
+        # 修复后：dict 消息通过 _get_message_content 正确提取 content
         user_entries = [e for e in raw_entries if e["role"] == "user"]
-        assert len(user_entries) == 0, (
-            "BUG: dict messages are not written to @a because after_turn uses getattr(msg, 'content', '') "
-            "which returns '' for dicts. Messages from chat_request are dicts, not ChatMessage objects."
+        assert len(user_entries) == 1, (
+            "dict messages should be written to @a correctly via _get_message_content helper. "
+            f"Got {len(user_entries)} user entries."
         )
+        assert user_entries[0]["content"] == "你好"
 
 
 class TestMemoryPortSignatureConsistency:
@@ -720,20 +720,20 @@ class TestMemoryRecallToolEndToEnd:
             )
 
     @pytest.mark.asyncio
-    async def test_executor_calls_port_with_turn_id_not_in_signature(self, enabled_config, buffer):
+    async def test_executor_calls_port_with_turn_id_in_signature(self, enabled_config, buffer):
         """执行器调用 recall_as_tool(query=..., turn_id=...)，
-        但 MemoryPort 抽象接口只有 recall_as_tool(query: str)。"""
+        Port 抽象接口应包含 turn_id 参数（Bug 9 已修复）。"""
         # 检查执行器代码是否传了 turn_id
         import inspect as ins
         executor_source = ins.getsource(MemoryRecallExecutor.execute)
         assert "turn_id" in executor_source, "executor passes turn_id to recall_as_tool"
 
-        # 检查 port 签名
+        # 检查 port 签名（修复后应包含 turn_id）
         port_sig = ins.signature(MemoryPort.recall_as_tool)
         port_params = [p.name for p in port_sig.parameters.values() if p.name != "self"]
-        assert "turn_id" not in port_params, (
-            f"Port recall_as_tool params: {port_params} — lacks turn_id, "
-            "but executor passes it. Signature drift."
+        assert "turn_id" in port_params, (
+            f"Port recall_as_tool params: {port_params} — should include turn_id "
+            "to match executor call. (Bug 9 fix)"
         )
 
 
@@ -836,71 +836,84 @@ class TestConsolidationSnapshotWatermark:
 
     @pytest.mark.asyncio
     async def test_new_data_during_consolidation_survives_cleanup(self, buffer):
-        """沉淀期间新写入的 @a 数据不应被全表清理。"""
+        """沉淀期间新写入的 @a 数据不应被全表清理。
+
+        修复后应使用水位清理：clear_raw_up_to(max_id)。
+        """
 
         # 1. 写入初始 @a 数据
         await buffer.append_raw("user", "旧消息1", "platform", "turn-1")
         await buffer.append_raw("assistant", "旧回复1", "platform", "turn-1")
 
-        # 2. 模拟沉淀管线读取快照
+        # 2. 模拟沉淀管线读取快照，记录水位
         snapshot = await buffer.read_all_raw()
         assert len(snapshot) == 2
+        max_raw_id = max(e["id"] for e in snapshot)
 
         # 3. 沉淀执行期间，新用户回合写入新 @a
         await buffer.append_raw("user", "新消息2", "platform", "turn-2")
 
-        # 4. 沉淀结束，清理 @a
-        await buffer.clear_raw()
+        # 4. 沉淀结束，按水位清理 @a
+        await buffer.clear_raw_up_to(max_raw_id)
 
         # 5. 断言：新消息不应被清理
         remaining = await buffer.read_all_raw()
         new_messages = [e for e in remaining if e["content"] == "新消息2"]
 
         assert len(new_messages) == 1, (
-            "BUG: clear_raw() does unconditional DELETE FROM buffer_raw. "
-            "Data written during consolidation (between snapshot read and cleanup) is lost. "
-            "Should use watermark: DELETE FROM buffer_raw WHERE id <= max_id."
+            "Watermark cleanup failed: data written during consolidation (between snapshot read "
+            "and cleanup) was lost. clear_raw_up_to(max_id) should only delete id <= max_id."
         )
 
     @pytest.mark.asyncio
     async def test_new_recall_during_consolidation_survives_cleanup(self, buffer):
-        """沉淀期间新写入的 @d 数据不应被全表清理。"""
+        """沉淀期间新写入的 @d 数据不应被全表清理。
+
+        修复后应使用水位清理：clear_recall_up_to(max_id)。
+        """
 
         # 1. 写入初始 @d
         await buffer.write_recall("trigger-1", "旧检索结果", "raw", {})
 
-        # 2. 模拟沉淀读取快照
+        # 2. 模拟沉淀读取快照，记录水位
         snapshot = await buffer.read_all_recall()
         assert len(snapshot) == 1
+        max_recall_id = max(e.id for e in snapshot)
 
         # 3. 沉淀期间，新查询写入新 @d
         await buffer.write_recall("trigger-2", "新检索结果", "raw", {})
 
-        # 4. 沉淀结束，清理 @d
-        await buffer.clear_recall()
+        # 4. 沉淀结束，按水位清理 @d
+        await buffer.clear_recall_up_to(max_recall_id)
 
         # 5. 断言：新 @d 不应被清理
         remaining = await buffer.read_all_recall()
         new_entries = [e for e in remaining if e.content == "新检索结果"]
 
         assert len(new_entries) == 1, (
-            "BUG: clear_recall() does unconditional DELETE FROM buffer_recall. "
-            "Data written during consolidation is lost. Should use watermark."
+            "Watermark cleanup failed: new @d data written during consolidation was lost. "
+            "clear_recall_up_to(max_id) should only delete id <= max_id."
         )
 
     @pytest.mark.asyncio
-    async def test_consolidation_pipeline_uses_unconditional_clear(self, buffer):
-        """验证 ConsolidationPipeline._finalize_with_cleanup 使用无条件清理。
+    async def test_consolidation_pipeline_uses_watermark_cleanup(self, buffer):
+        """验证 ConsolidationPipeline._finalize_with_cleanup 使用水位清理。
 
         通过模拟 W2 失败来触发 _finalize_with_cleanup 清理路径。
-        W1 失败不触发清理（直接返回），W2+ 失败和成功路径都会清理。
+        修复后应只删除快照水位及以下的数据，保留沉淀期间新写入的数据。
         """
         # 写入初始数据（沉淀快照内的数据）
         await buffer.append_raw("user", "消息1", "platform", "turn-1")
 
         # 构造一个 W1 成功、W2 失败的 pipeline
+        # event_extractor 在 W1 读取快照后执行，模拟沉淀期间新数据写入
+        async def extract_side_effect(raw_entries, recall_entries):
+            # W1 已读取快照，此时模拟新用户回合写入新数据
+            await buffer.append_raw("user", "消息2", "platform", "turn-2")
+            return [{"event": "test"}]
+
         success_extractor = AsyncMock()
-        success_extractor.extract = AsyncMock(return_value=[{"event": "test"}])
+        success_extractor.extract = AsyncMock(side_effect=extract_side_effect)
 
         failing_persona = AsyncMock()
         failing_persona.observe = AsyncMock(side_effect=RuntimeError("W2 failed"))
@@ -916,21 +929,24 @@ class TestConsolidationSnapshotWatermark:
             persona_store=AsyncMock(),
         )
 
-        # 模拟沉淀期间新用户回合写入新数据
-        await buffer.append_raw("user", "消息2", "platform", "turn-2")
-
         result = await pipeline.run()
 
         # W2 失败，_finalize_with_cleanup 被调用
         assert result.success is False
         assert result.failed_step == "W2"
 
-        # 验证：所有 @a 都被清理了（包括沉淀期间写入的新数据 "消息2"）
+        # 验证：沉淀快照内的旧数据被清理，但沉淀期间写入的新数据保留
         remaining = await buffer.read_all_raw()
-        assert len(remaining) == 0, (
-            "BUG: ConsolidationPipeline._finalize_with_cleanup calls clear_raw() which does "
-            "unconditional DELETE FROM buffer_raw. Data written between snapshot and cleanup is lost. "
-            f"Expected 0 remaining (confirming data loss), got {len(remaining)}."
+        old_messages = [e for e in remaining if e["content"] == "消息1"]
+        new_messages = [e for e in remaining if e["content"] == "消息2"]
+
+        assert len(old_messages) == 0, (
+            f"Snapshot data should be cleaned up. Got {len(old_messages)} old messages."
+        )
+        assert len(new_messages) == 1, (
+            f"BUG: Data written during consolidation was lost. "
+            f"Expected 1 new message preserved, got {len(new_messages)}. "
+            f"_finalize_with_cleanup should use watermark, not unconditional DELETE."
         )
 
 
@@ -994,7 +1010,7 @@ class TestToolLeakPrevention:
     """用户/主动回合并发时工具不泄漏。"""
 
     def test_resolve_memory_recall_for_user_context(self):
-        """resolve('memory_recall') 在用户回合不应返回执行器。"""
+        """resolve('memory_recall', trigger_type='user') 在用户回合不应返回执行器。"""
         registry = ToolRegistry()
         executor = MemoryRecallExecutor(memory_port=MagicMock())
         registry.register(MEMORY_RECALL_DEF, executor)
@@ -1005,15 +1021,15 @@ class TestToolLeakPrevention:
         user_names = [s["function"]["name"] for s in user_schemas]
         assert "memory_recall" not in user_names
 
-        # resolve 应也排除 —— 但当前不检查 _wake_only
-        resolved = registry.resolve("memory_recall")
+        # resolve 应也排除 —— Bug 4 fix: resolve() 现在检查 trigger_type
+        resolved = registry.resolve("memory_recall", trigger_type="user")
         assert resolved is None, (
-            "BUG: resolve() does not check _wake_only set. "
+            "BUG: resolve() does not check _wake_only set for trigger_type='user'. "
             "User context can still execute wake-only tools via resolve()."
         )
 
     def test_resolve_memory_recall_for_wake_context(self):
-        """resolve('memory_recall') 在主动回合应返回执行器。"""
+        """resolve('memory_recall', trigger_type='wake') 在主动回合应返回执行器。"""
         registry = ToolRegistry()
         executor = MemoryRecallExecutor(memory_port=MagicMock())
         registry.register(MEMORY_RECALL_DEF, executor)
@@ -1023,5 +1039,18 @@ class TestToolLeakPrevention:
         wake_names = [s["function"]["name"] for s in wake_schemas]
         assert "memory_recall" in wake_names
 
-        resolved = registry.resolve("memory_recall")
+        resolved = registry.resolve("memory_recall", trigger_type="wake")
         assert resolved is not None
+
+    def test_resolve_default_trigger_type_rejects_wake_only(self):
+        """resolve() 无 trigger_type 参数时默认拒绝 wake-only 工具。"""
+        registry = ToolRegistry()
+        executor = MemoryRecallExecutor(memory_port=MagicMock())
+        registry.register(MEMORY_RECALL_DEF, executor)
+        registry.register_for_wake_only("memory_recall")
+
+        # 无 trigger_type 时应默认拒绝
+        resolved = registry.resolve("memory_recall")
+        assert resolved is None, (
+            "BUG: resolve() without trigger_type should default to reject wake-only tools."
+        )

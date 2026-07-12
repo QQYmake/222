@@ -49,8 +49,9 @@ class MemoryRecallExecutor(ToolExecutor):
             "memory_recall_tool_called",
             extra={"turn_id": context.turn_id, "trigger_id": context.trigger_id, "query_len": len(query)},
         )
-        recall = await self._memory_port.recall_as_tool(
+        # Bug 10 fix: recall_as_tool 返回 str（与 Port 签名一致），直接返回
+        result = await self._memory_port.recall_as_tool(
             query=query,
             turn_id=context.turn_id,
         )
-        return recall.text
+        return result if isinstance(result, str) else str(result)

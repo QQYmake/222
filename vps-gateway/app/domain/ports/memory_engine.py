@@ -85,6 +85,6 @@ class MemoryPort(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def recall_as_tool(self, query: str) -> str:
+    async def recall_as_tool(self, query: str, turn_id: str = "") -> str:
         """memory_recall 工具调用入口。触发 @4 流程，返回润色后的 @d 内容。"""
         ...

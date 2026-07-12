@@ -26,6 +26,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _get_message_content(msg: Any) -> str:
+    """从消息中提取 content，兼容 dict 和 ChatMessage。"""
+    if isinstance(msg, dict):
+        return msg.get("content", "") or ""
+    return getattr(msg, "content", "") or ""
+
+
+def _get_message_role(msg: Any) -> str:
+    """从消息中提取 role，兼容 dict 和 ChatMessage。"""
+    if isinstance(msg, dict):
+        return msg.get("role", "user")
+    return getattr(msg, "role", "user")
+
+
 class MemoryEngine(MemoryPort):
     """记忆引擎编排器。
 
@@ -70,11 +84,14 @@ class MemoryEngine(MemoryPort):
             logger.debug("memory_recall_skipped: MEMORY_ENABLED=false")
             return MemoryRecall(mode="degraded", text="", source_recall_ids=[])
 
-        # 检查 X-Memory-Mode: new_window（通过 trigger 的 metadata 传递）
+        # 检查 X-Memory-Mode: new_window
+        memory_mode = ""
         if hasattr(trigger, "metadata") and trigger.metadata:
             memory_mode = trigger.metadata.get("x-memory-mode", "")
-            if memory_mode == "new_window":
-                return await self._run_new_window_path()
+        if not memory_mode and hasattr(trigger, "chat_request"):
+            memory_mode = trigger.chat_request.get("x-memory-mode", "")
+        if memory_mode == "new_window":
+            return await self._run_new_window_path()
 
         # 意图分类（M4 前 intent_classifier 可能是 mock）
         if self._intent_classifier is None:
@@ -82,7 +99,7 @@ class MemoryEngine(MemoryPort):
             return await self._run_surface_path()
 
         intent_result = await self._intent_classifier.classify(
-            raw_messages[-1].content if raw_messages else ""
+            _get_message_content(raw_messages[-1]) if raw_messages else ""
         )
 
         if intent_result.label == "query":
@@ -100,25 +117,29 @@ class MemoryEngine(MemoryPort):
             return MemoryRecall(mode="degraded", text="", source_recall_ids=[])
 
         # M5 实现：asyncio.create_task + timeout + 降级 γ
+        # 使用 shield 确保超时时不取消后台 task（γ 降级：前台降级、后台继续）
+        task = asyncio.create_task(
+            self._retrieval_pipeline.execute(intent_result, raw_messages)
+        )
         try:
-            task = asyncio.create_task(
-                self._retrieval_pipeline.execute(intent_result, raw_messages)
-            )
-            await asyncio.wait_for(task, timeout=self._config.retrieval_timeout)
-            entry = await self._buffer.read_recall_latest()
-            if entry:
-                return MemoryRecall(
-                    mode="query",
-                    text=entry.content,
-                    source_recall_ids=[entry.id],
-                )
+            result = await asyncio.wait_for(asyncio.shield(task), timeout=self._config.retrieval_timeout)
+            # Bug 1 fix: 使用 result.recall_id 精确读取，而非全局 read_recall_latest()
+            if result.recall_id:
+                entry = await self._buffer.read_recall_by_id(result.recall_id)
+                if entry:
+                    return MemoryRecall(
+                        mode="query",
+                        text=entry.content,
+                        source_recall_ids=[entry.id],
+                    )
             return MemoryRecall(mode="query", text="", source_recall_ids=[])
         except asyncio.TimeoutError:
             logger.warning(
-                "memory_recall_timeout: retrieval exceeded %.1fs",
+                "memory_recall_timeout: retrieval exceeded %.1fs, background task continues",
                 self._config.retrieval_timeout,
             )
-            # γ 降级：后台 task 继续运行，不阻塞主 LLM
+            # γ 降级：后台 task 继续运行（shield 保证不被取消），不阻塞主 LLM
+            # 后台 task 完成后写入当前代次 @d，供后续沉淀使用
             return MemoryRecall(mode="degraded", text="", source_recall_ids=[])
 
     async def _run_surface_path(self) -> MemoryRecall:
@@ -151,22 +172,35 @@ class MemoryEngine(MemoryPort):
         turn_id: str,
         trigger: "TurnTrigger | None" = None,
     ) -> None:
-        """回合结束后调用。追加 @a 原料。"""
+        """回合结束后调用。追加 @a 原料。
+
+        只追加本轮新增的 user 和 assistant 消息，避免重复追加历史。
+        """
         if not self._config.enabled:
             return
 
         platform = getattr(trigger, "platform", "unknown") if trigger else "unknown"
 
-        # 追加用户消息
+        # Bug 2 fix: 只追加本轮 user 消息（最后一条），不重复追加完整历史
+        # Bug 8 fix: 兼容 dict 和 ChatMessage
+        last_user_content = ""
         for msg in raw_messages:
-            role = getattr(msg, "role", "user")
-            content = getattr(msg, "content", "")
-            if content:
-                await self._buffer.append_raw(role, content, platform, turn_id)
+            role = _get_message_role(msg)
+            content = _get_message_content(msg)
+            if role == "user" and content:
+                last_user_content = content  # 取最后一条 user 消息
 
-        # 追加响应
+        if last_user_content:
+            await self._buffer.append_raw("user", last_user_content, platform, turn_id)
+
+        # Bug 3 fix: 使用 message_content 而非 message.content
         try:
-            response_content = response.choices[0].message.content
+            choice = response.choices[0]
+            response_content = getattr(choice, "message_content", None)
+            if response_content is None:
+                # fallback: 尝试 message.content（兼容旧格式）
+                msg = getattr(choice, "message", None)
+                response_content = getattr(msg, "content", None) if msg else None
             if response_content:
                 await self._buffer.append_raw("assistant", response_content, platform, turn_id)
         except (AttributeError, IndexError, TypeError):
@@ -177,7 +211,12 @@ class MemoryEngine(MemoryPort):
         return await self._run_new_window_path()
 
     async def recall_as_tool(self, query: str, turn_id: str = "") -> str:
-        """memory_recall 工具调用入口。触发 @4 流程，返回润色后的 @d 内容。"""
+        """memory_recall 工具调用入口。触发 @4 流程，返回润色后的 @d 内容。
+
+        Bug 1 fix: 使用 recall_id 精确读取，而非全局 read_recall_latest()
+        Bug 7 fix: 使用 shield 保证后台 task 不被取消
+        Bug 9: turn_id 参数保留但 Port 接口同步更新
+        """
         if not self._config.enabled:
             return ""
 
@@ -195,10 +234,12 @@ class MemoryEngine(MemoryPort):
             task = asyncio.create_task(
                 self._retrieval_pipeline.execute(intent, messages)
             )
-            await asyncio.wait_for(task, timeout=self._config.retrieval_timeout)
-            entry = await self._buffer.read_recall_latest()
-            if entry:
-                return entry.content
+            result = await asyncio.wait_for(asyncio.shield(task), timeout=self._config.retrieval_timeout)
+            # Bug 1 fix: 使用 result.recall_id 精确读取
+            if result.recall_id:
+                entry = await self._buffer.read_recall_by_id(result.recall_id)
+                if entry:
+                    return entry.content
             return ""
         except asyncio.TimeoutError:
             logger.warning(

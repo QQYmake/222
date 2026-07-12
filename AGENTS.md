@@ -47,10 +47,12 @@
 
 ## 实现进度
 
-v3 M0—M10 全部完成，541 个测试通过（380 passed v2 基线 + 161 v3 新增）+ 3 skipped。
-v3 引入认知记忆引擎：ebbingflow vendoring（15 直接复用 + 3 适配）、ChromaDB 向量检索、SQLite 递归 CTE 图谱、意图分类（规则+LLM兜底+周期校准）、@4 查询路径（多轨检索+重排+生成+润色+超时降级γ）、@6 无查询路径（@e表面生成）、memory_recall 工具（仅主动唤醒回合暴露）、新窗口衔接（X-Memory-Mode）、2am 沉淀管线（W1-W6）、ContextBuilder 记忆注入、TurnRunner MemoryPort 注入、app.py v3 完整接线。
+v3 M0—M10 全部完成，591 个测试通过（575 单元 + 16 集成）。
+v3 引入认知记忆引擎：ebbingflow vendoring（15 直接复用 + 3 适配）、ChromaDB 向量检索、SQLite 递归 CTE 图谱、意图分类（规则+LLM兜底+周期校准）、@4 查询路径（多轨检索+重排+生成+润色+超时降级γ）、@6 无查询路径（@e表面生成）、memory_recall 工具（仅主动唤醒回合暴露）、新窗口衔接（X-Memory-Mode）、2am 沉淀管线（W1-W6+水位清理）、ContextBuilder 记忆注入、TurnRunner MemoryPort 注入、app.py v3 完整接线。
+已完成 13 个 P0 bug 修复 + 31 回归测试 + 16 集成测试 + 真实 API 冒烟（DeepSeek）。
 MEMORY_ENABLED=false 时系统行为与 v2 完全一致（向后兼容验证通过）。
 v3 架构不变量（28 条）全部实现并验证。
+后端放行门槛全部满足，可转入 Android 联调。
 
 ## 常见问题和预防
 

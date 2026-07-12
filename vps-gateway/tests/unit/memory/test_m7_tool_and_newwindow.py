@@ -61,12 +61,7 @@ class TestMemoryRecallExecutor:
     async def test_execute_degraded_returns_empty(self):
         """降级时返回空字符串"""
         mock_memory_port = AsyncMock()
-        mock_memory_port.recall_as_tool = AsyncMock(return_value=MemoryRecall(
-            mode="degraded",
-            text="",
-            source_recall_ids=[],
-            metadata={},
-        ))
+        mock_memory_port.recall_as_tool = AsyncMock(return_value="")
 
         executor = MemoryRecallExecutor(mock_memory_port)
         ctx = ToolExecutionContext(turn_id="t1", trigger_type="wake", trigger_id="w1")

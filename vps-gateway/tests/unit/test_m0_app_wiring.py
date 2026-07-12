@@ -93,12 +93,12 @@ class TestToolRegistryWakeOnly:
             registry.register_for_wake_only("nonexistent")
 
     def test_resolve_wake_only_tool_still_works(self):
-        """wake-only 工具仍然可以通过 resolve 解析。"""
+        """wake-only 工具仍然可以通过 resolve(trigger_type='wake') 解析。"""
         registry = ToolRegistry(test_tools_enabled=True)
         registry.register(_make_tool_def("memory_recall"), _DummyExecutor())
         registry.register_for_wake_only("memory_recall")
 
-        executor = registry.resolve("memory_recall")
+        executor = registry.resolve("memory_recall", trigger_type="wake")
         assert executor is not None
 
 

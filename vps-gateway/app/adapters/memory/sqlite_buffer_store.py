@@ -184,6 +184,27 @@ class SQLiteBufferStore(BufferStore):
         finally:
             conn.close()
 
+    async def read_recall_by_id(self, recall_id: int) -> Optional[RecallEntry]:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM buffer_recall WHERE id = ?", (recall_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            # 标记 read_at
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                "UPDATE buffer_recall SET read_at = ? WHERE id = ?",
+                (now, row["id"]),
+            )
+            row = conn.execute(
+                "SELECT * FROM buffer_recall WHERE id = ?", (recall_id,)
+            ).fetchone()
+            return self._row_to_recall(row)
+        finally:
+            conn.close()
+
     async def scan_recall_for_surface(self) -> list[RecallEntry]:
         conn = self._connect()
         try:
@@ -245,9 +266,23 @@ class SQLiteBufferStore(BufferStore):
         finally:
             conn.close()
 
+    async def clear_raw_up_to(self, max_id: int) -> None:
+        conn = self._connect()
+        try:
+            conn.execute("DELETE FROM buffer_raw WHERE id <= ?", (max_id,))
+        finally:
+            conn.close()
+
     async def clear_recall(self) -> None:
         conn = self._connect()
         try:
             conn.execute("DELETE FROM buffer_recall")
+        finally:
+            conn.close()
+
+    async def clear_recall_up_to(self, max_id: int) -> None:
+        conn = self._connect()
+        try:
+            conn.execute("DELETE FROM buffer_recall WHERE id <= ?", (max_id,))
         finally:
             conn.close()

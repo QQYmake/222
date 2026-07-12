@@ -52,8 +52,8 @@ class ToolDispatcher:
             "tool_name": call.name,
         })
 
-        # 1. 查找工具
-        executor = self._registry.resolve(call.name)
+        # 1. 查找工具（传入 trigger_type 实现 wake-only 授权边界）
+        executor = self._registry.resolve(call.name, trigger_type=context.trigger_type)
         definition = self._registry.get_definition(call.name)
         if executor is None or definition is None:
             duration_ms = int((time.monotonic() - started) * 1000)

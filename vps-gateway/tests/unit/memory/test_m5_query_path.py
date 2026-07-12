@@ -185,8 +185,8 @@ class TestQueryPathWithTimeout:
         )
 
         mock_rp = AsyncMock()
-        mock_rp.execute = AsyncMock()
-        mock_buffer_manager.read_recall_latest = AsyncMock(return_value=RecallEntry(
+        mock_rp.execute = AsyncMock(return_value=MagicMock(recall_id=1))
+        mock_buffer_manager.read_recall_by_id = AsyncMock(return_value=RecallEntry(
             id=1, content="polished recall text", raw_content="raw",
             trigger_id="t1", read_at=None, created_at="2025-01-01T00:00:00",
             metadata={},
@@ -215,6 +215,7 @@ class TestRecallAsTool:
     def mock_buffer_manager(self):
         bm = AsyncMock()
         bm.read_recall_latest = AsyncMock(return_value=None)
+        bm.read_recall_by_id = AsyncMock(return_value=None)
         bm.write_recall = AsyncMock(return_value=1)
         return bm
 
@@ -235,7 +236,10 @@ class TestRecallAsTool:
             retrieval_timeout=5.0,
         )
 
-        mock_buffer_manager.read_recall_latest = AsyncMock(return_value=RecallEntry(
+        # pipeline.execute 返回带 recall_id 的结果
+        mock_retrieval_pipeline.execute = AsyncMock(return_value=MagicMock(recall_id=2))
+
+        mock_buffer_manager.read_recall_by_id = AsyncMock(return_value=RecallEntry(
             id=2, content="tool recall text", raw_content="raw",
             trigger_id="tool-1", read_at=None, created_at="2025-01-01T00:00:00",
             metadata={},
@@ -261,7 +265,10 @@ class TestRecallAsTool:
             retrieval_timeout=5.0,
         )
 
-        mock_buffer_manager.read_recall_latest = AsyncMock(return_value=None)
+        # pipeline.execute 返回无 recall_id 的结果
+        mock_retrieval_pipeline.execute = AsyncMock(return_value=MagicMock(recall_id=None))
+
+        mock_buffer_manager.read_recall_by_id = AsyncMock(return_value=None)
 
         engine = MemoryEngine(
             config=config,

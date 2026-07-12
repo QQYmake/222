@@ -152,16 +152,21 @@ class TurnRunner:
 
         # 1b. 记忆引擎 recall（如果启用）
         memory_recall_text = None
+        memory_recall_mode = None
         if self._memory_port is not None:
             try:
                 raw_messages = trigger.chat_request.get("messages", [])
                 recall = await self._memory_port.recall(trigger, raw_messages)
-                memory_recall_text = recall.text if recall and recall.text else None
+                # Bug 6 fix: 区分 None（引擎未注入）和空字符串（引擎明确返回空）
+                # 只有 None 时才回退 Sample；空字符串表示引擎已运行但无记忆
+                if recall is not None:
+                    memory_recall_text = recall.text  # 保留空字符串
+                    memory_recall_mode = recall.mode
                 self._logger.info("memory_recall_completed", extra={
                     "turn_id": turn_id,
                     "request_id": trigger.request_id,
                     "recall_mode": recall.mode if recall else None,
-                    "recall_degraded": recall.degraded if recall else False,
+                    "recall_degraded": (recall.mode == "degraded") if recall else False,
                 })
             except Exception as e:
                 self._logger.warning("memory_recall_failed", extra={
@@ -188,9 +193,13 @@ class TurnRunner:
         self._log_turn_async(trigger, prepared.sample_versions, response, started_at, turn_id)
 
         # 4b. 记忆引擎 after_turn（如果启用）
+        # Bug 5 fix: 正确传递 raw_messages, response, turn_id, trigger
         if self._memory_port is not None:
             try:
-                await self._memory_port.after_turn(trigger, response)
+                raw_messages = trigger.chat_request.get("messages", [])
+                await self._memory_port.after_turn(
+                    raw_messages, response, turn_id, trigger
+                )
             except Exception as e:
                 self._logger.warning("memory_after_turn_failed", extra={
                     "turn_id": turn_id,
@@ -231,6 +240,24 @@ class TurnRunner:
         samples = self._sample_reader.read_all()
 
         # 2. 构造上下文
+        # 2b. 记忆引擎 recall（Bug 11 fix: 主动回合也获取记忆注入）
+        if self._memory_port is not None:
+            try:
+                memory_recall = await self._memory_port.recall(trigger, [])
+                if memory_recall is not None:
+                    samples.memories = memory_recall
+                    self._logger.info("wake_memory_recall_completed", extra={
+                        "turn_id": turn_id,
+                        "wake_id": trigger.trigger_id,
+                        "mode": memory_recall.mode,
+                    })
+            except Exception as e:
+                self._logger.warning("wake_memory_recall_failed", extra={
+                    "turn_id": turn_id,
+                    "wake_id": trigger.trigger_id,
+                    "error": str(e),
+                })
+
         prepared = self._context_builder.build(samples, trigger)
 
         # 3. 调用异步模型
@@ -253,6 +280,19 @@ class TurnRunner:
                 outcome="failed",
                 error_code="model_error",
             )
+
+        # 3b. 记忆引擎 after_turn（Bug 11 fix: 主动回合也写 @a）
+        if self._memory_port is not None:
+            try:
+                await self._memory_port.after_turn(
+                    [], response, turn_id, trigger
+                )
+            except Exception as e:
+                self._logger.warning("wake_memory_after_turn_failed", extra={
+                    "turn_id": turn_id,
+                    "wake_id": trigger.trigger_id,
+                    "error": str(e),
+                })
 
         # 4. 处理主动回合结果
         return await self._handle_active_turn_async(trigger, response, prepared, turn_id)

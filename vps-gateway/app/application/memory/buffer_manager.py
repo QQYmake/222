@@ -54,6 +54,10 @@ class BufferManager:
         """读取最新一条 @d（标记 read_at，不删除）。"""
         return await self._store.read_recall_latest()
 
+    async def read_recall_by_id(self, recall_id: int) -> "RecallEntry | None":
+        """按 ID 读取 @d（标记 read_at，不删除）。"""
+        return await self._store.read_recall_by_id(recall_id)
+
     async def scan_recall_for_surface(self) -> list["RecallEntry"]:
         """扫描 @d 供 @e 选材（不标记，不删除）。"""
         return await self._store.scan_recall_for_surface()
@@ -72,6 +76,14 @@ class BufferManager:
         """清空 @a。"""
         await self._store.clear_raw()
 
+    async def clear_raw_up_to(self, max_id: int) -> None:
+        """清空 @a 中 id <= max_id 的记录（水位清理）。"""
+        await self._store.clear_raw_up_to(max_id)
+
     async def clear_recall(self) -> None:
         """清空 @d。"""
         await self._store.clear_recall()
+
+    async def clear_recall_up_to(self, max_id: int) -> None:
+        """清空 @d 中 id <= max_id 的记录（水位清理）。"""
+        await self._store.clear_recall_up_to(max_id)

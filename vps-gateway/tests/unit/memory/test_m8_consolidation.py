@@ -30,8 +30,8 @@ class TestConsolidationPipelineFullRun:
         mock_buffer.read_all_recall = AsyncMock(return_value=[
             MagicMock(content="recall text"),
         ])
-        mock_buffer.clear_raw = AsyncMock()
-        mock_buffer.clear_recall = AsyncMock()
+        mock_buffer.clear_raw_up_to = AsyncMock()
+        mock_buffer.clear_recall_up_to = AsyncMock()
 
         mock_event_extractor = MagicMock()
         mock_event_extractor.extract = AsyncMock(return_value=[MagicMock()])
@@ -77,8 +77,8 @@ class TestConsolidationPipelineFullRun:
         mock_graph_store.write_events.assert_awaited_once()
         mock_graph_store.write_sagas.assert_awaited_once()
         mock_persona_store.write.assert_awaited_once()
-        mock_buffer.clear_raw.assert_awaited_once()
-        mock_buffer.clear_recall.assert_awaited_once()
+        mock_buffer.clear_raw_up_to.assert_awaited_once()
+        mock_buffer.clear_recall_up_to.assert_awaited_once()
 
 
 class TestConsolidationPipelineW1Failure:
@@ -90,8 +90,8 @@ class TestConsolidationPipelineW1Failure:
         mock_buffer = MagicMock()
         mock_buffer.read_all_raw = AsyncMock(return_value=[MagicMock()])
         mock_buffer.read_all_recall = AsyncMock(return_value=[])
-        mock_buffer.clear_raw = AsyncMock()
-        mock_buffer.clear_recall = AsyncMock()
+        mock_buffer.clear_raw_up_to = AsyncMock()
+        mock_buffer.clear_recall_up_to = AsyncMock()
 
         mock_event_extractor = MagicMock()
         mock_event_extractor.extract = AsyncMock(side_effect=RuntimeError("LLM timeout"))
@@ -113,8 +113,8 @@ class TestConsolidationPipelineW1Failure:
         assert result.failed_step == "W1"
         assert result.error  # contains error message
         # Buffer NOT cleared
-        mock_buffer.clear_raw.assert_not_awaited()
-        mock_buffer.clear_recall.assert_not_awaited()
+        mock_buffer.clear_raw_up_to.assert_not_awaited()
+        mock_buffer.clear_recall_up_to.assert_not_awaited()
 
 
 class TestConsolidationPipelinePartialFailure:
@@ -126,8 +126,8 @@ class TestConsolidationPipelinePartialFailure:
         mock_buffer = MagicMock()
         mock_buffer.read_all_raw = AsyncMock(return_value=[MagicMock()])
         mock_buffer.read_all_recall = AsyncMock(return_value=[])
-        mock_buffer.clear_raw = AsyncMock()
-        mock_buffer.clear_recall = AsyncMock()
+        mock_buffer.clear_raw_up_to = AsyncMock()
+        mock_buffer.clear_recall_up_to = AsyncMock()
 
         mock_event_extractor = MagicMock()
         mock_event_extractor.extract = AsyncMock(return_value=[MagicMock()])
@@ -158,8 +158,8 @@ class TestConsolidationPipelinePartialFailure:
         # W4 (saga) failed
         assert result.failed_step == "W4"
         # Buffers still cleared
-        mock_buffer.clear_raw.assert_awaited_once()
-        mock_buffer.clear_recall.assert_awaited_once()
+        mock_buffer.clear_raw_up_to.assert_awaited_once()
+        mock_buffer.clear_recall_up_to.assert_awaited_once()
 
 
 class TestConsolidationPipelineEmptyBuffers:

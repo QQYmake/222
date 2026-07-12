@@ -45,6 +45,11 @@ class BufferStore(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def read_recall_by_id(self, recall_id: int) -> Optional[RecallEntry]:
+        """按 ID 读取 @d（标记 read_at，不删除）。"""
+        ...
+
+    @abc.abstractmethod
     async def scan_recall_for_surface(self) -> list[RecallEntry]:
         """扫描 @d 供 @e 选材（不标记，不删除）。"""
         ...
@@ -72,6 +77,16 @@ class BufferStore(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def clear_raw_up_to(self, max_id: int) -> None:
+        """清空 @a 中 id <= max_id 的记录（水位清理）。"""
+        ...
+
+    @abc.abstractmethod
     async def clear_recall(self) -> None:
         """清空 @d。"""
+        ...
+
+    @abc.abstractmethod
+    async def clear_recall_up_to(self, max_id: int) -> None:
+        """清空 @d 中 id <= max_id 的记录（水位清理）。"""
         ...

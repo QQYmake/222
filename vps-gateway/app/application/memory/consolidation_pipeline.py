@@ -76,6 +76,17 @@ class ConsolidationPipeline:
         recall_entries = await self._buffer.read_all_recall()
         steps_completed: list[str] = []
 
+        # Bug 12 fix: 记录快照水位，清理时只删除 <= 水位的记录
+        # 避免沉淀期间新写入的数据被全表清理
+        snapshot_max_raw_id = max(
+            (e["id"] if isinstance(e, dict) else getattr(e, "id", 0) for e in raw_messages),
+            default=0,
+        )
+        snapshot_max_recall_id = max(
+            (e.id if hasattr(e, "id") else e["id"] for e in recall_entries),
+            default=0,
+        )
+
         # W1: 事件/事实抽取
         try:
             events = await self._event_extractor.extract(raw_messages, recall_entries)
@@ -114,6 +125,7 @@ class ConsolidationPipeline:
             return await self._finalize_with_cleanup(
                 consolidation_id, steps_completed, "W2", str(e),
                 events, persona_snapshot, None, None,
+                snapshot_max_raw_id, snapshot_max_recall_id,
             )
 
         # W3: 结构化事件校验（规则层 + 可选 LLM 轻量校验）
@@ -132,6 +144,7 @@ class ConsolidationPipeline:
             return await self._finalize_with_cleanup(
                 consolidation_id, steps_completed, "W3", str(e),
                 events, persona_snapshot, None, None,
+                snapshot_max_raw_id, snapshot_max_recall_id,
             )
 
         # W4: Saga 聚类归并
@@ -151,6 +164,7 @@ class ConsolidationPipeline:
             return await self._finalize_with_cleanup(
                 consolidation_id, steps_completed, "W4", str(e),
                 events, persona_snapshot, saga_updates, None,
+                snapshot_max_raw_id, snapshot_max_recall_id,
             )
 
         # W5: 消息向量化
@@ -169,6 +183,7 @@ class ConsolidationPipeline:
             return await self._finalize_with_cleanup(
                 consolidation_id, steps_completed, "W5", str(e),
                 events, persona_snapshot, saga_updates, None,
+                snapshot_max_raw_id, snapshot_max_recall_id,
             )
 
         # W6: 润色
@@ -190,12 +205,14 @@ class ConsolidationPipeline:
             return await self._finalize_with_cleanup(
                 consolidation_id, steps_completed, "W6", str(e),
                 events, persona_snapshot, saga_updates, polished_persona,
+                snapshot_max_raw_id, snapshot_max_recall_id,
             )
 
         # 清理：持久化 + 清空缓冲区
         return await self._finalize_with_cleanup(
             consolidation_id, steps_completed, None, None,
             events, persona_snapshot, saga_updates, polished_persona,
+            snapshot_max_raw_id, snapshot_max_recall_id,
         )
 
     def _validate_events(self, events: list[Any]) -> list[Any]:
@@ -220,8 +237,13 @@ class ConsolidationPipeline:
         persona_snapshot: Any | None,
         saga_updates: list[Any] | None,
         polished_persona: Any | None,
+        snapshot_max_raw_id: int = 0,
+        snapshot_max_recall_id: int = 0,
     ) -> ConsolidationResult:
-        """清理步骤：持久化已完成步骤的结果 + 清空 @a/@d。"""
+        """清理步骤：持久化已完成步骤的结果 + 清空 @a/@d。
+
+        Bug 12 fix: 只清理 <= 快照水位的记录，保留沉淀期间新写入的数据。
+        """
         try:
             # 持久化事件到 GraphStore
             if events:
@@ -242,13 +264,17 @@ class ConsolidationPipeline:
                 extra={"consolidation_id": consolidation_id, "error": str(e)},
             )
 
-        # 清空 @a/@d（即使部分失败也清空，符合架构文档要求）
+        # 清空 @a/@d — 只清理快照水位及以下的记录（Bug 12 fix）
         try:
-            await self._buffer.clear_raw()
-            await self._buffer.clear_recall()
+            await self._buffer.clear_raw_up_to(snapshot_max_raw_id)
+            await self._buffer.clear_recall_up_to(snapshot_max_recall_id)
             logger.info(
-                "buffer_cleared",
-                extra={"consolidation_id": consolidation_id},
+                "buffer_cleared_up_to_watermark",
+                extra={
+                    "consolidation_id": consolidation_id,
+                    "max_raw_id": snapshot_max_raw_id,
+                    "max_recall_id": snapshot_max_recall_id,
+                },
             )
         except Exception as e:
             logger.error(

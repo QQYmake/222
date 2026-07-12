@@ -66,16 +66,24 @@ class ToolRegistry:
             })
         return result
 
-    def resolve(self, name: str) -> ToolExecutor | None:
+    def resolve(
+        self, name: str, trigger_type: str = "user"
+    ) -> ToolExecutor | None:
         """按名称解析执行器。
 
         返回 None 表示工具不存在或当前环境不可用。
+
+        Bug 4 fix: 检查 _wake_only 集合，用户回合（trigger_type="user"）
+        和未知 trigger_type 均拒绝 wake-only 工具，只有 wake 回合允许。
         """
         td = self._definitions.get(name)
         if td is None:
             return None
         # 测试工具在生产模式下不可用
         if not self._test_tools_enabled and not td.enabled_in_production:
+            return None
+        # Bug 4 fix: wake-only 工具仅在 wake 回合可用
+        if name in self._wake_only and trigger_type != "wake":
             return None
         return self._executors.get(name)
 

@@ -242,8 +242,10 @@ class ContextBuilder:
           8. 主动回合: [server_system, timer_user_message]
           9. 收集 sample_versions
         """
-        if memory_recall_text:
+        if memory_recall_text is not None:
             # V3: <memories> 来源由记忆引擎接管
+            # Bug 6 fix: 空字符串表示引擎明确返回空，生成空 <memories> 块
+            # None 表示引擎未注入，回退 V2 Sample 行为
             state_block = render_state_xml_with_memory_text(samples, memory_recall_text)
         else:
             # V2 行为：使用 sample memories

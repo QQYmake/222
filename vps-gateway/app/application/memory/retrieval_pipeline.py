@@ -71,7 +71,15 @@ class RetrievalPipeline:
         self, intent_result: "IntentResult", raw_messages: list["ChatMessage"]
     ) -> RetrievalResult:
         """执行完整 R2-R7 链路。"""
-        query_text = raw_messages[-1].content if raw_messages else ""
+        # 兼容 dict 和 ChatMessage 对象
+        if raw_messages:
+            last_msg = raw_messages[-1]
+            if isinstance(last_msg, dict):
+                query_text = last_msg.get("content", "") or ""
+            else:
+                query_text = getattr(last_msg, "content", "") or ""
+        else:
+            query_text = ""
 
         # R2: 嵌入查询向量
         query_vector = await self._embed(query_text)
@@ -215,7 +223,14 @@ class RetrievalPipeline:
         if self._llm_bridge is None:
             return ""
 
-        query_text = raw_messages[-1].content if raw_messages else ""
+        if raw_messages:
+            last_msg = raw_messages[-1]
+            if isinstance(last_msg, dict):
+                query_text = last_msg.get("content", "") or ""
+            else:
+                query_text = getattr(last_msg, "content", "") or ""
+        else:
+            query_text = ""
         candidate_text = "\n".join(
             str(c.get("content", c)) for c in ranked_candidates[:10]
         )
