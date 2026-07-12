@@ -16,6 +16,48 @@ class ConflictingTokenFieldsError(Exception):
     """max_completion_tokens 和 max_tokens 不可同时出现。"""
 
 
+class ToolLoopLimitError(Exception):
+    """工具循环达到上限（轮次或总次数）。
+
+    架构不变量 5：达到工具上限后不再调用模型。
+    """
+    def __init__(self, reason: str, tool_round: int = 0, total_tool_calls: int = 0):
+        self.reason = reason
+        self.tool_round = tool_round
+        self.total_tool_calls = total_tool_calls
+        super().__init__(f"ToolLoopLimitError: {reason} (round={tool_round}, calls={total_tool_calls})")
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolCallFunction:
+    """OpenAI tool_call.function 结构。"""
+
+    name: str
+    arguments: str  # 原始 JSON 字符串
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "arguments": self.arguments}
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolCall:
+    """OpenAI tool_call 结构。
+
+    数据合同来源：架构文档 5.3 ToolCall。
+    """
+
+    id: str
+    type: str = "function"
+    function: Optional[ToolCallFunction] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "function": (self.function or ToolCallFunction("", "")).to_dict(),
+        }
+
+
 @dataclasses.dataclass(frozen=True)
 class ChatCompletionRequest:
     """OpenAI Chat 请求（网关接受的最小子集）。"""
@@ -95,12 +137,13 @@ def to_internal_max_output_tokens(request: ChatCompletionRequest) -> Optional[in
 
 @dataclasses.dataclass(frozen=True)
 class Choice:
-    """单个选择项。"""
+    """单个选择项。v2 扩展：支持 tool_calls。"""
 
     index: int
     message_role: str
-    message_content: str
+    message_content: Optional[str]
     finish_reason: str
+    tool_calls: Optional[list[dict]] = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -118,24 +161,34 @@ class ChatCompletionResponse:
         """返回第一个 assistant 文本结果。"""
         for choice in self.choices:
             if choice.message_role == "assistant":
-                return choice.message_content
+                return choice.message_content or ""
         return ""
+
+    def first_assistant_tool_calls(self) -> Optional[list[dict]]:
+        """返回第一个 assistant 的 tool_calls，无则 None。"""
+        for choice in self.choices:
+            if choice.message_role == "assistant" and choice.tool_calls:
+                return choice.tool_calls
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         """转换为 OpenAI 兼容 dict。"""
+        choices: list[dict[str, Any]] = []
+        for c in self.choices:
+            msg: dict[str, Any] = {"role": c.message_role, "content": c.message_content}
+            if c.tool_calls is not None:
+                msg["tool_calls"] = c.tool_calls
+            choices.append({
+                "index": c.index,
+                "message": msg,
+                "finish_reason": c.finish_reason,
+            })
         result: dict[str, Any] = {
             "id": self.id,
             "object": self.object,
             "created": self.created,
             "model": self.model,
-            "choices": [
-                {
-                    "index": c.index,
-                    "message": {"role": c.message_role, "content": c.message_content},
-                    "finish_reason": c.finish_reason,
-                }
-                for c in self.choices
-            ],
+            "choices": choices,
         }
         if self.usage is not None:
             result["usage"] = self.usage
@@ -169,20 +222,28 @@ def validate_chat_completion_response(parsed: dict[str, Any]) -> ChatCompletionR
     for ch in choices:
         msg = ch.get("message", {})
         content = msg.get("content", "")
-        if not isinstance(content, str):
-            raise ValueError("choice.message.content must be a string")
+        if not isinstance(content, (str, type(None))):
+            raise ValueError("choice.message.content must be a string or null")
+        tool_calls = msg.get("tool_calls")
+        if tool_calls is not None and not isinstance(tool_calls, list):
+            raise ValueError("choice.message.tool_calls must be a list if present")
         parsed_choices.append(
             Choice(
                 index=ch.get("index", 0),
                 message_role=msg.get("role", "assistant"),
                 message_content=content,
                 finish_reason=ch.get("finish_reason", "stop"),
+                tool_calls=tool_calls,
             )
         )
 
-    has_assistant = any(c.message_role == "assistant" and c.message_content for c in parsed_choices)
+    # v2: assistant 有 tool_calls 时允许 content 为 null
+    has_assistant = any(
+        c.message_role == "assistant" and (c.message_content or c.tool_calls)
+        for c in parsed_choices
+    )
     if not has_assistant:
-        raise ValueError("response must contain at least one assistant text result")
+        raise ValueError("response must contain at least one assistant text result or tool_calls")
 
     return ChatCompletionResponse(
         id=resp_id,

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -29,10 +29,13 @@ from app.adapters.http.chat_controller import create_chat_router
 
 @pytest.fixture
 def mock_turn_runner():
-    """Mock TurnRunner，返回一个标准的 ChatCompletionResponse。"""
+    """Mock TurnRunner，返回一个标准的 ChatCompletionResponse。
+
+    v2: run_user_turn 为异步方法。
+    """
     runner = MagicMock()
 
-    def fake_run(trigger):
+    async def fake_run_user_turn(trigger):
         response = MagicMock()
         response.to_dict.return_value = {
             "id": "chatcmpl-fake-001",
@@ -57,7 +60,7 @@ def mock_turn_runner():
         }
         return response
 
-    runner.run.side_effect = fake_run
+    runner.run_user_turn = AsyncMock(side_effect=fake_run_user_turn)
     return runner
 
 
@@ -181,8 +184,8 @@ class TestChatCompletions:
             headers={"Authorization": "Bearer test-gateway-key"},
         )
         assert resp.status_code == 200
-        mock_turn_runner.run.assert_called_once()
-        trigger = mock_turn_runner.run.call_args[0][0]
+        mock_turn_runner.run_user_turn.assert_called_once()
+        trigger = mock_turn_runner.run_user_turn.call_args[0][0]
         assert trigger.request_id  # UUID 生成
         assert trigger.chat_request["model"] == "deepseek-chat"
 
@@ -191,7 +194,7 @@ class TestChatCompletions:
         _, client = app_and_client
         from app.domain.models.sample import SampleReadError
 
-        mock_turn_runner.run.side_effect = SampleReadError(
+        mock_turn_runner.run_user_turn.side_effect = SampleReadError(
             sample_type="identity",
             reason="file_not_found",
         )
@@ -209,7 +212,7 @@ class TestChatCompletions:
         _, client = app_and_client
         from app.domain.models.errors import UpstreamTimeout
 
-        mock_turn_runner.run.side_effect = UpstreamTimeout("timeout")
+        mock_turn_runner.run_user_turn.side_effect = UpstreamTimeout("timeout")
         body = {"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}]}
         resp = client.post(
             "/v1/chat/completions",
@@ -224,7 +227,7 @@ class TestChatCompletions:
         _, client = app_and_client
         from app.domain.models.errors import UpstreamError
 
-        mock_turn_runner.run.side_effect = UpstreamError(
+        mock_turn_runner.run_user_turn.side_effect = UpstreamError(
             status_code=500, message="provider error",
         )
         body = {"model": "deepseek-chat", "messages": [{"role": "user", "content": "hi"}]}

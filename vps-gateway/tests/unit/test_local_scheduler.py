@@ -38,7 +38,10 @@ class TestLocalSchedulerInit:
         scheduler.shutdown()
 
     def test_enabled_scheduler_starts_thread(self):
-        """enabled=True 时启动 daemon 线程。"""
+        """enabled=True 时调用 start() 启动 daemon 线程。
+
+        v2: Scheduler 不在构造函数中启动，由 lifespan 调用 start()。
+        """
         from app.adapters.scheduler.local_scheduler import LocalScheduler
 
         runner = MagicMock()
@@ -48,13 +51,17 @@ class TestLocalSchedulerInit:
             instruction="test",
             enabled=True,
         )
+        scheduler.start()
         assert scheduler._thread is not None
         assert scheduler._thread.daemon is True
         scheduler.shutdown()
         scheduler._thread.join(timeout=2)
 
     def test_shutdown_stops_loop(self):
-        """shutdown() 后线程在合理时间内退出。"""
+        """shutdown() 后线程在合理时间内退出。
+
+        v2: 需要先调用 start()。
+        """
         from app.adapters.scheduler.local_scheduler import LocalScheduler
 
         runner = MagicMock()
@@ -64,6 +71,7 @@ class TestLocalSchedulerInit:
             instruction="test",
             enabled=True,
         )
+        scheduler.start()
         scheduler.shutdown()
         scheduler._thread.join(timeout=3)
         assert not scheduler._thread.is_alive()

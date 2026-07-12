@@ -61,14 +61,13 @@ class LocalScheduler:
         self._turn_runner = turn_runner
         self._interval_seconds = interval_minutes * 60
         self._instruction = instruction
+        self._enabled = enabled
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._active_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._logger = get_logger("scheduler")
-
-        if enabled:
-            self.start()
+        # v2: 不在构造函数中启动；由 FastAPI lifespan 调用 start()
 
     def start(self):
         """启动后台线程。"""

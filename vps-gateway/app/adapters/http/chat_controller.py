@@ -48,6 +48,13 @@ def create_chat_router(turn_runner, gateway_api_key: str) -> APIRouter:
         except Exception:
             return openai_error(400, "invalid_request", "Invalid JSON body")
 
+        # 2a. v2: 前端 tools/tool_choice 不允许
+        if body.get("tools") or body.get("tool_choice"):
+            return openai_error(
+                400, "client_tools_not_allowed",
+                "Client-side tools are not allowed. All tools are managed by the server.",
+            )
+
         # 3. 解析并校验 OpenAI Chat 请求
         try:
             chat_request = parse_chat_request(body)
@@ -66,9 +73,12 @@ def create_chat_router(turn_runner, gateway_api_key: str) -> APIRouter:
             chat_request=body,
         )
 
-        # 5. 调用 TurnRunner
+        # 5. 调用 TurnRunner — v2 优先 async，兼容 sync
         try:
-            response = turn_runner.run(trigger)
+            if hasattr(turn_runner, 'run_user_turn'):
+                response = await turn_runner.run_user_turn(trigger)
+            else:
+                response = turn_runner.run(trigger)
             return JSONResponse(status_code=200, content=response.to_dict())
         except SampleReadError as e:
             logger.error("sample_read_failed", extra={"reason": e.reason})
@@ -82,5 +92,9 @@ def create_chat_router(turn_runner, gateway_api_key: str) -> APIRouter:
         except UpstreamError as e:
             logger.error("upstream_error", extra={"status_code": e.status_code})
             return openai_error(502, "upstream_error", "Model provider failed")
+        except Exception as e:
+            if "ToolLoopLimit" in type(e).__name__:
+                return openai_error(422, "tool_loop_limit_exceeded", str(e))
+            raise
 
     return router
