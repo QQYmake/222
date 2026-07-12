@@ -264,31 +264,31 @@ MEM_EMBED_MODEL=paraphrase-multilingual-MiniLM-L12-v2
 
 MEM_INTENT_BASE_URL=https://api.deepseek.com
 MEM_INTENT_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_INTENT_MODEL=deepseek-chat
+MEM_INTENT_MODEL=deepseek-v4-flash
 
 MEM_GEN_BASE_URL=https://api.deepseek.com
 MEM_GEN_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_GEN_MODEL=deepseek-chat
+MEM_GEN_MODEL=deepseek-v4-flash
 
 MEM_SURF_BASE_URL=https://api.deepseek.com
 MEM_SURF_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_SURF_MODEL=deepseek-chat
+MEM_SURF_MODEL=deepseek-v4-flash
 
 MEM_EXTRACT_BASE_URL=https://api.deepseek.com
 MEM_EXTRACT_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_EXTRACT_MODEL=deepseek-chat
+MEM_EXTRACT_MODEL=deepseek-v4-flash
 
 MEM_PERSONA_BASE_URL=https://api.deepseek.com
 MEM_PERSONA_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_PERSONA_MODEL=deepseek-chat
+MEM_PERSONA_MODEL=deepseek-v4-flash
 
 MEM_SAGA_BASE_URL=https://api.deepseek.com
 MEM_SAGA_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_SAGA_MODEL=deepseek-chat
+MEM_SAGA_MODEL=deepseek-v4-flash
 
 MEM_POLISH_BASE_URL=https://api.deepseek.com
 MEM_POLISH_API_KEY=sk-d9cee49798ce480788a463169406a58b
-MEM_POLISH_MODEL=deepseek-chat
+MEM_POLISH_MODEL=deepseek-v4-flash
 ```
 
 凭据安全规则：
