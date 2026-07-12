@@ -12,10 +12,10 @@
 
 | 文件 | 路径 | 用途 |
 |---|---|---|
-| v2 架构文档 | `[请填写：VPS中转网关_v2架构文档.md 的绝对路径]` | 唯一功能范围、数据合同、模块接口、数据流、验收基线和实现顺序 |
-| 现有 v1 项目 | `[请填写：现有 vps-gateway 项目根目录绝对路径]` | 增量修改对象；不得另建替代项目 |
-| 编码经验文档 | `[请填写：仓库根 README.md 的绝对路径]` | 工程控制论协作经验、反馈点和验证层级 |
-| 技能目录 | `[请填写：superpowers-main 技能目录绝对路径]` | 加载本任务要求的技能 |
+| v2 架构文档 | `[[请填写：VPS中转网关_v2架构文档.md 的绝对路径]](https://github.com/QQYmake/222/blob/main/VPS%E7%BD%91%E5%85%B3/VPS%E4%B8%AD%E8%BD%AC%E7%BD%91%E5%85%B3_v2%E6%9E%B6%E6%9E%84%E6%96%87%E6%A1%A3.md)` | 唯一功能范围、数据合同、模块接口、数据流、验收基线和实现顺序 |
+| 现有 v1 项目 | `[[请填写：现有 vps-gateway 项目根目录绝对路径]](https://github.com/QQYmake/222/tree/main/vps-gateway)` | 增量修改对象；不得另建替代项目 |
+| 编码经验文档 | `[[请填写：仓库根 README.md 的绝对路径]](https://github.com/QQYmake/222/blob/main/README.md)` | 工程控制论协作经验、反馈点和验证层级 |
+| 技能目录 | `[[请填写：superpowers-main 技能目录绝对路径]](https://github.com/QQYmake/222/tree/main/superpowers-main)` | 加载本任务要求的技能 |
 
 路径规则：
 
@@ -209,16 +209,15 @@ Task [编号]：[名称]
 
 ## 六、凭据管理
 
-使用前在下面二选一，只保留实际选项：
+已有真实上游 API Key，占位符位置：`gitignore 已包含 .env（根目录 .gitignore 第 16 行）`，不会被提交。只允许在 M7 冒烟测试中读取；禁止输出或写入日志。
 
-- [ ] 已有真实上游 API Key，位置：`[请填写：.env 路径]`。只允许在 M7 冒烟测试中读取；禁止输出或写入日志。
-- [ ] 暂无真实凭据。M0—M6 全部使用 Mock；M7 跳过真实上游请求并按下方规则交付。
-
-如果选择“暂无真实凭据”，这不是任务阻断：完成 M7 其余验证，跳过真实上游请求，记录 `BLOCKED_EXTERNAL_CREDENTIAL`，并给出之后可直接运行的脱敏冒烟命令；不要停下来等待凭据。
-
-凭据缺失导致的外部冒烟使用独立状态 `not_run_external`，不计入 pytest 的 skipped 回归门禁。
-
-无论选择哪项：
+使用真实数据进行测试：
+base_url (OpenAI)	:
+https://api.deepseek.com
+key:
+sk-d9cee49798ce480788a463169406a58b
+model:
+deepseek-v4-flash
 
 - `.env` 必须被 `.gitignore` 排除。
 - `.env.example` 只能包含空占位符。
